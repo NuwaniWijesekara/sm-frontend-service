@@ -1,26 +1,38 @@
 {
-  "name": "scan-me-client",
+  "name": "scan-me-fontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "clear-cache": "rimraf .next && rimraf node_modules/.cache",
+    "clear-all": "npm run clear-cache && rimraf node_modules && npm install",
+    "reset": "npm run clear-all && npm run dev",
+    "clear-browser-cache": "start chrome://settings/clearBrowserData || start ms-edge://settings/clearBrowserData",
+    "dev-fresh": "npm run clear-cache && npm run dev"
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
+    "axios": "^1.17.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^1.18.0",
     "next": "16.2.9",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.19.43",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.5.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "tailwindcss": "^4",
+    "postcss": "^8.5.15",
     "typescript": "^5"
   }
 }
