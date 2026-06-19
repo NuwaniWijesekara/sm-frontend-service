@@ -67,7 +67,7 @@ export const signup = async (email: string, password: string): Promise<void> => 
 
 // ── Photographer: events CRUD ───────────────────────────────
 export const fetchEvents = async () => {
-  const { data } = await api.get("/events");
+  const { data } = await api.get("/events/");
   return data;
 };
 
