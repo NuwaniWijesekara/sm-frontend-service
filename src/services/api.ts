@@ -9,7 +9,7 @@ const api = axios.create({
 // Auth token injector
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("guest_token") || localStorage.getItem("token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -35,11 +35,17 @@ export const fetchEventByToken = async (token: string): Promise<EventPageData> =
 // ── Guest: selfie match ─────────────────────────────────────
 export const matchSelfie = async (
   eventId: string,
-  selfieBlob: Blob,
+  selfieBlob?: Blob,
+  savedFaceId?: string,
   onProgress?: (pct: number) => void
 ): Promise<MatchResult[]> => {
   const form = new FormData();
-  form.append("selfie", selfieBlob, "selfie.jpg");
+  if (selfieBlob) {
+    form.append("selfie", selfieBlob, "selfie.jpg");
+  }
+  if (savedFaceId) {
+    form.append("saved_face_id", savedFaceId);
+  }
   form.append("event_id", eventId);
   const { data } = await api.post<{ matches: MatchResult[] }>("/match/selfie", form, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -48,6 +54,81 @@ export const matchSelfie = async (
     },
   });
   return data.matches;
+};
+
+// ── Guest: Auth ─────────────────────────────────────────────
+export const guestRegister = async (name: string, email: string, password: string): Promise<void> => {
+  await api.post("/guest/auth/register", { name, email, password });
+};
+
+export const guestLogin = async (email: string, password: string): Promise<string> => {
+  const { data } = await api.post<{ access_token: string }>("/guest/auth/login", { email, password });
+  return data.access_token;
+};
+
+export const guestLoginAnonymous = async (): Promise<string> => {
+  const { data } = await api.post<{ access_token: string }>("/guest/auth/anonymous");
+  return data.access_token;
+};
+
+export const guestLoginGoogle = async (idToken: string): Promise<string> => {
+  const { data } = await api.post<{ access_token: string }>("/guest/auth/google", { id_token: idToken });
+  return data.access_token;
+};
+
+// ── Guest: Saved Faces ──────────────────────────────────────
+export interface SavedFace {
+  id: string;
+  nickname: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export const fetchSavedFaces = async (): Promise<SavedFace[]> => {
+  const { data } = await api.get<SavedFace[]>("/guest/saved-faces");
+  return data;
+};
+
+export const createSavedFace = async (nickname: string, file: Blob): Promise<SavedFace> => {
+  const form = new FormData();
+  form.append("nickname", nickname);
+  form.append("file", file, "selfie.jpg");
+  const { data } = await api.post<SavedFace>("/guest/saved-faces", form, {
+    headers: { "Content-Type": "multipart/form-data" }
+  });
+  return data;
+};
+
+export const updateSavedFace = async (id: string, nickname: string): Promise<SavedFace> => {
+  const { data } = await api.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
+  return data;
+};
+
+export const deleteSavedFace = async (id: string): Promise<void> => {
+  await api.delete(`/guest/saved-faces/${id}`);
+};
+
+// ── Guest: History ──────────────────────────────────────────
+export interface SearchHistory {
+  id: string;
+  created_at: string;
+  event: {
+    id: string;
+    name: string;
+    date: string;
+    cover_photo_url?: string;
+    qr_token: string;
+  };
+  photos: {
+    id: string;
+    s3_url: string;
+    thumbnail_url?: string;
+  }[];
+}
+
+export const fetchGuestHistory = async (): Promise<SearchHistory[]> => {
+  const { data } = await api.get<SearchHistory[]>("/guest/history");
+  return data;
 };
 
 // ── Photographer: auth ──────────────────────────────────────

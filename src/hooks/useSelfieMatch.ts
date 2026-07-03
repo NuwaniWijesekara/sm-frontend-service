@@ -32,43 +32,55 @@ export const useSelfieMatch = (eventId: string) => {
   const [uploadPct, setUploadPct] = useState(0);
 
   const runMatch = useCallback(
-    async (file: File) => {
+    async (fileOrId: File | string) => {
       if (BUSY.includes(status)) return; // prevent double-submit
 
       setError(null);
       setResults([]);
       setUploadPct(0);
 
-      // 1. Validate
-      setStatus("validating");
-      const validErr = validateImageFile(file);
-      if (validErr) {
-        setError(validErr);
-        setStatus("error");
-        return;
-      }
-
-      // 2. Resize in browser memory — never touches disk
-      setStatus("resizing");
-      let blob: Blob;
-      try {
-        blob = await resizeToBlob(file);
-      } catch {
-        setError("Could not process your image. Please try another photo.");
-        setStatus("error");
-        return;
-      }
-
-      // 3. Upload + match
-      setStatus("uploading");
-      try {
+      if (typeof fileOrId === "string") {
         setStatus("matching");
-        const matches = await matchSelfie(eventId, blob, setUploadPct);
-        setResults(matches);
-        setStatus("done");
-      } catch {
-        setError("Matching failed. Try a well-lit, clear selfie facing the camera.");
-        setStatus("error");
+        try {
+          const matches = await matchSelfie(eventId, undefined, fileOrId, setUploadPct);
+          setResults(matches);
+          setStatus("done");
+        } catch (err: any) {
+          setError(err.response?.data?.detail || "Matching failed. Please try again.");
+          setStatus("error");
+        }
+      } else {
+        // 1. Validate
+        setStatus("validating");
+        const validErr = validateImageFile(fileOrId);
+        if (validErr) {
+          setError(validErr);
+          setStatus("error");
+          return;
+        }
+
+        // 2. Resize in browser memory — never touches disk
+        setStatus("resizing");
+        let blob: Blob;
+        try {
+          blob = await resizeToBlob(fileOrId);
+        } catch {
+          setError("Could not process your image. Please try another photo.");
+          setStatus("error");
+          return;
+        }
+
+        // 3. Upload + match
+        setStatus("uploading");
+        try {
+          setStatus("matching");
+          const matches = await matchSelfie(eventId, blob, undefined, setUploadPct);
+          setResults(matches);
+          setStatus("done");
+        } catch {
+          setError("Matching failed. Try a well-lit, clear selfie facing the camera.");
+          setStatus("error");
+        }
       }
       // blob falls out of scope here → GC collects it. Nothing persisted.
     },
