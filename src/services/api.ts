@@ -1,9 +1,26 @@
 import axios, { AxiosError } from "axios";
 import { EventPageData, MatchResult } from "@/types";
 
-const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000",
-  timeout: 60000,
+const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+// Photographer-facing client
+export const api = axios.create({ baseURL, timeout: 60000 });
+api.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Guest-facing client
+export const guestApi = axios.create({ baseURL, timeout: 60000 });
+guestApi.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem("guest_token");
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 // Auth token injector
@@ -20,7 +37,7 @@ export type FetchError = "invalid_token" | "not_ready" | "network";
 // ── Guest: load event by ID ─────────────────────────────────
 export const fetchEventByToken = async (token: string): Promise<EventPageData> => {
   try {
-    const { data } = await api.get<EventPageData>(`/guest/${token}`);
+    const { data } = await guestApi.get<EventPageData>(`/guest/${token}`);
     return data;
   } catch (err) {
     const e = err as AxiosError;
@@ -47,7 +64,7 @@ export const matchSelfie = async (
     form.append("saved_face_id", savedFaceId);
   }
   form.append("event_id", eventId);
-  const { data } = await api.post<{ matches: MatchResult[] }>("/match/selfie", form, {
+  const { data } = await guestApi.post<{ matches: MatchResult[] }>("/match/selfie", form, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (e) => {
       if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
@@ -58,21 +75,21 @@ export const matchSelfie = async (
 
 // ── Guest: Auth ─────────────────────────────────────────────
 export const guestRegister = async (name: string, email: string, password: string): Promise<void> => {
-  await api.post("/guest/auth/register", { name, email, password });
+  await guestApi.post("/guest/auth/register", { name, email, password });
 };
 
 export const guestLogin = async (email: string, password: string): Promise<string> => {
-  const { data } = await api.post<{ access_token: string }>("/guest/auth/login", { email, password });
+  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/login", { email, password });
   return data.access_token;
 };
 
 export const guestLoginAnonymous = async (): Promise<string> => {
-  const { data } = await api.post<{ access_token: string }>("/guest/auth/anonymous");
+  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/anonymous");
   return data.access_token;
 };
 
 export const guestLoginGoogle = async (idToken: string): Promise<string> => {
-  const { data } = await api.post<{ access_token: string }>("/guest/auth/google", { id_token: idToken });
+  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/google", { id_token: idToken });
   return data.access_token;
 };
 
@@ -85,7 +102,7 @@ export interface SavedFace {
 }
 
 export const fetchSavedFaces = async (): Promise<SavedFace[]> => {
-  const { data } = await api.get<SavedFace[]>("/guest/saved-faces");
+  const { data } = await guestApi.get<SavedFace[]>("/guest/saved-faces");
   return data;
 };
 
@@ -93,19 +110,19 @@ export const createSavedFace = async (nickname: string, file: Blob): Promise<Sav
   const form = new FormData();
   form.append("nickname", nickname);
   form.append("file", file, "selfie.jpg");
-  const { data } = await api.post<SavedFace>("/guest/saved-faces", form, {
+  const { data } = await guestApi.post<SavedFace>("/guest/saved-faces", form, {
     headers: { "Content-Type": "multipart/form-data" }
   });
   return data;
 };
 
 export const updateSavedFace = async (id: string, nickname: string): Promise<SavedFace> => {
-  const { data } = await api.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
+  const { data } = await guestApi.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
   return data;
 };
 
 export const deleteSavedFace = async (id: string): Promise<void> => {
-  await api.delete(`/guest/saved-faces/${id}`);
+  await guestApi.delete(`/guest/saved-faces/${id}`);
 };
 
 // ── Guest: History ──────────────────────────────────────────
@@ -127,7 +144,7 @@ export interface SearchHistory {
 }
 
 export const fetchGuestHistory = async (): Promise<SearchHistory[]> => {
-  const { data } = await api.get<SearchHistory[]>("/guest/history");
+  const { data } = await guestApi.get<SearchHistory[]>("/guest/history");
   return data;
 };
 
