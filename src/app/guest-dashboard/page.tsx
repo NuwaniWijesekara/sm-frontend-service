@@ -176,14 +176,24 @@ export default function GuestDashboard() {
               <Compass className="w-5 h-5 text-accent-dark" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-ink">Have an Event Token or Link?</h3>
-              <p className="text-xs text-dim">Paste the token or URL below to search through the photos.</p>
+              <h3 className="font-bold text-sm text-ink">Search Collection or Event</h3>
+              <p className="text-xs text-dim">Enter a photographer's Collection Username, Token, or Link.</p>
             </div>
           </div>
-          <form onSubmit={handleNavigateToEvent} className="w-full md:w-auto flex flex-1 max-w-xl gap-2">
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            if (!eventTokenInput.trim()) return;
+            let token = eventTokenInput.trim();
+            if (token.startsWith("@")) token = token.substring(1);
+            if (token.includes("/events/guest/")) {
+              const match = token.match(/\/events\/guest\/([^/?#]+)/);
+              if (match) token = match[1];
+            }
+            router.push(`/events/guest/${token}`);
+          }} className="w-full md:w-auto flex flex-1 max-w-xl gap-2">
             <input
               type="text"
-              placeholder="Enter scanner link..."
+              placeholder="Enter Collection Username (e.g. @wedding2026) or Link..."
               className="flex-1 px-4 py-2.5 bg-chalk border border-border rounded-xl focus:bg-surface focus:border-accent outline-none text-xs text-ink transition placeholder:text-dim"
               value={eventTokenInput}
               onChange={(e) => setEventTokenInput(e.target.value)}

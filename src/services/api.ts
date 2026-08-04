@@ -169,13 +169,20 @@ export const fetchEvents = async () => {
   return data;
 };
 
-export const createEvent = async (name: string, drive_url: string) => {
-  const { data } = await api.post("/events/", { name, drive_url });
+export const checkUsernameAvailability = async (username: string, excludeEventId?: string): Promise<{ available: boolean; message: string }> => {
+  const { data } = await api.get<{ available: boolean; message: string }>("/events/check-username", {
+    params: { username, exclude_event_id: excludeEventId || undefined }
+  });
   return data;
 };
 
-export const updateEvent = async (id: string, name: string, drive_url: string) => {
-  const { data } = await api.put(`/events/${id}`, { name, drive_url });
+export const createEvent = async (name: string, drive_url: string, username?: string) => {
+  const { data } = await api.post("/events/", { name, drive_url, username: username || undefined });
+  return data;
+};
+
+export const updateEvent = async (id: string, name: string, drive_url: string, username?: string) => {
+  const { data } = await api.put(`/events/${id}`, { name, drive_url, username: username || undefined });
   return data;
 };
 

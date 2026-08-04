@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
 import { guestLogin, guestRegister, guestLoginAnonymous, guestLoginGoogle } from "@/services/api";
-import { Camera, User, Lock, ArrowRight, UserPlus, Shield, Sparkles, CheckCircle2, AlertCircle } from "lucide-react";
+import { Camera, User, Lock, ArrowRight, UserPlus, Shield, Sparkles, CheckCircle2, AlertCircle, Search } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -17,7 +17,20 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [hasGuestToken, setHasGuestToken] = useState(false);
   const [hasPhotoToken, setHasPhotoToken] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
   const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; password?: string }>({});
+
+  const handleCollectionSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collectionSearchQuery.trim()) return;
+    let q = collectionSearchQuery.trim();
+    if (q.startsWith("@")) q = q.substring(1);
+    if (q.includes("/events/guest/")) {
+      const match = q.match(/\/events\/guest\/([^/?#]+)/);
+      if (match) q = match[1];
+    }
+    router.push(`/events/guest/${q}`);
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -192,8 +205,28 @@ export default function LandingPage() {
             </span>
           </h1>
           <p className="text-dim text-base md:text-lg leading-relaxed max-w-xl">
-            Welcome to ScanMe AI. Choose a saved face or upload a new selfie to search through event photos in seconds.
+            Welcome to ScanMe AI. Enter a photographer's collection username below or choose a saved face to search event photos.
           </p>
+
+          {/* Quick Collection Search Bar */}
+          <form onSubmit={handleCollectionSearch} className="flex gap-2 max-w-md bg-surface p-2 border border-border rounded-2xl shadow-sm">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-dim absolute left-3.5 top-3.5" />
+              <input
+                type="text"
+                placeholder="Enter Collection Username (e.g. @wedding2026)"
+                value={collectionSearchQuery}
+                onChange={(e) => setCollectionSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-3 py-2.5 bg-chalk border border-border rounded-xl text-xs outline-none focus:ring-2 focus:ring-accent font-medium text-ink placeholder:text-dim"
+              />
+            </div>
+            <button
+              type="submit"
+              className="px-5 py-2.5 bg-ink text-chalk hover:bg-ink/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-sm"
+            >
+              Search <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </form>
 
           <div className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-surface border border-border rounded-xl flex gap-3 shadow-sm">
