@@ -1,11 +1,12 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { MatchResult } from "@/types";
 import { MatchStatus } from "@/hooks/useSelfieMatch";
 import CameraCapture from "./CameraCapture";
 import MatchedResults from "@/components/event/MatchedResults";
 import Spinner from "@/components/ui/Spinner";
 import SelfieUploader from "./SelfieUploader";
+import { SavedFace } from "@/services/api";
 
 interface Props {
   eventId: string;
@@ -14,8 +15,9 @@ interface Props {
   results: MatchResult[];
   error: string | null;
   uploadPct: number;
-  onRunMatch: (file: File) => void;
+  onRunMatch: (fileOrId: File | string) => void;
   onReset: () => void;
+  savedFaces?: SavedFace[];
 }
 
 export default function SelfiePanel({
@@ -26,8 +28,10 @@ export default function SelfiePanel({
   uploadPct,
   onRunMatch,
   onReset,
+  savedFaces = [],
 }: Props) {
   const busy = ["validating", "resizing", "uploading", "matching"].includes(status);
+  const [selectedFaceId, setSelectedFaceId] = useState("");
 
   return (
     <div className="bg-surface rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-5">
@@ -42,7 +46,6 @@ export default function SelfiePanel({
         </h2>
         <p className="text-dim text-xs mt-1 leading-relaxed">
           Take or upload a selfie — we surface every photo you appear in.
-          Your selfie is never stored.
         </p>
       </div>
 
@@ -68,6 +71,46 @@ export default function SelfiePanel({
       ) : (
         /* ── Idle / error ── */
         <>
+          {/* Saved Faces Selection */}
+          {savedFaces.length > 0 && (
+            <div className="space-y-2.5 p-4 bg-chalk/45 border border-border rounded-2xl">
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-dim">
+                Search using saved profile
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={selectedFaceId}
+                  onChange={(e) => setSelectedFaceId(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-surface border border-border rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">-- Choose a face --</option>
+                  {savedFaces.map((face) => (
+                    <option key={face.id} value={face.id}>
+                      {face.nickname}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => {
+                    if (selectedFaceId) onRunMatch(selectedFaceId);
+                  }}
+                  disabled={!selectedFaceId}
+                  className="px-4 py-2 bg-ink hover:bg-ink/80 text-chalk text-xs font-bold rounded-xl transition"
+                >
+                  Find
+                </button>
+              </div>
+            </div>
+          )}
+
+          {savedFaces.length > 0 && (
+            <div className="flex items-center gap-3">
+              <hr className="flex-1 border-border" />
+              <span className="text-[10px] text-dim font-bold uppercase tracking-wider">or new photo</span>
+              <hr className="flex-1 border-border" />
+            </div>
+          )}
+
           <CameraCapture onCapture={onRunMatch} disabled={busy} />
 
           <div className="flex items-center gap-3">
@@ -85,10 +128,10 @@ export default function SelfiePanel({
           )}
 
           <p className="text-[10px] text-dim text-center leading-relaxed">
-            🔒 Processed in memory only — immediately discarded after matching.
+            🔒 Processed in memory securely.
           </p>
         </>
       )}
     </div>
   );
-}
+}

@@ -2,13 +2,15 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
-import { fetchEvents, createEvent, updateEvent, deleteEvent } from "@/services/api";
+import { fetchEvents, createEvent, updateEvent, deleteEvent, checkUsernameAvailability } from "@/services/api";
 
 interface EventData {
   id: string;
   name: string;
   drive_url: string;
   status: string;
+  username?: string;
+  qr_token?: string;
 }
 
 export default function DashboardPage() {
@@ -21,10 +23,44 @@ export default function DashboardPage() {
   const [modalMode, setModalMode] = useState<"CREATE" | "EDIT">("CREATE");
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventName, setEventName] = useState("");
+  const [eventUsername, setEventUsername] = useState("");
+  const [usernameCheckStatus, setUsernameCheckStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
+  const [usernameMessage, setUsernameMessage] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const getToken = () => localStorage.getItem("token");
+
+  useEffect(() => {
+    if (!eventUsername.trim()) {
+      setUsernameCheckStatus("idle");
+      setUsernameMessage("");
+      return;
+    }
+    setUsernameCheckStatus("checking");
+    setUsernameMessage("Checking availability...");
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await checkUsernameAvailability(
+          eventUsername,
+          modalMode === "EDIT" ? editingEventId || undefined : undefined
+        );
+        if (res.available) {
+          setUsernameCheckStatus("available");
+          setUsernameMessage("Username is available!");
+        } else {
+          setUsernameCheckStatus("taken");
+          setUsernameMessage("Username is already taken");
+        }
+      } catch (e) {
+        setUsernameCheckStatus("idle");
+        setUsernameMessage("");
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [eventUsername, modalMode, editingEventId]);
 
   const loadEvents = async () => {
     const token = getToken();
@@ -34,11 +70,9 @@ export default function DashboardPage() {
     }
     try {
       const data = await fetchEvents();
-      console.log("Events data from API:", data);
-      console.log("First event status:", data[0]?.status);
       setEvents(data);
     } catch (error: any) {
-      console.error("Failed to fetch events:", error);
+      console.warn("Failed to sync events:", error?.message || error);
       if (error.response?.status === 401) {
         localStorage.removeItem("token");
         router.push("/auth");
@@ -55,17 +89,19 @@ export default function DashboardPage() {
       return;
     }
     loadEvents();
-    const interval = setInterval(loadEvents, 5000);
+    if (isFormModalOpen) return;
+    const interval = setInterval(loadEvents, 8000);
     return () => clearInterval(interval);
-  }, [router]);
+  }, [router, isFormModalOpen]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/");
   };
 
-  const getGuestLink = (eventId: string) => {
-    return `http://localhost:3000/events/guest/${eventId}`;
+  const getGuestLink = (event: EventData) => {
+    const key = event.username || event.qr_token || event.id;
+    return `http://localhost:3000/events/guest/${key}`;
   };
 
   const handleCopyLink = (link: string) => {
@@ -77,6 +113,9 @@ export default function DashboardPage() {
   const openCreateModal = () => {
     setModalMode("CREATE");
     setEventName("");
+    setEventUsername("");
+    setUsernameCheckStatus("idle");
+    setUsernameMessage("");
     driveUrl && setDriveUrl("");
     setFormError("");
     setIsFormModalOpen(true);
@@ -86,6 +125,9 @@ export default function DashboardPage() {
     setModalMode("EDIT");
     setEditingEventId(event.id);
     setEventName(event.name);
+    setEventUsername(event.username || "");
+    setUsernameCheckStatus("idle");
+    setUsernameMessage("");
     setDriveUrl(event.drive_url);
     setFormError("");
     setIsFormModalOpen(true);
@@ -93,6 +135,15 @@ export default function DashboardPage() {
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!eventUsername.trim()) {
+      setFormError("Collection username is required.");
+      return;
+    }
+    if (usernameCheckStatus === "taken") {
+      setFormError("Collection username is already taken. Please choose another.");
+      return;
+    }
+
     setFormLoading(true);
     setFormError("");
 
@@ -104,14 +155,15 @@ export default function DashboardPage() {
 
     try {
       if (modalMode === "CREATE") {
-        await createEvent(eventName, driveUrl);
+        await createEvent(eventName, driveUrl, eventUsername);
       } else {
-        await updateEvent(editingEventId!, eventName, driveUrl);
+        await updateEvent(editingEventId!, eventName, driveUrl, eventUsername);
       }
       setIsFormModalOpen(false);
       loadEvents();
-    } catch (error) {
-      setFormError(`Failed to ${modalMode.toLowerCase()} event.`);
+    } catch (error: any) {
+      const detail = error.response?.data?.detail;
+      setFormError(detail || `Failed to ${modalMode.toLowerCase()} event.`);
       console.error(error);
     } finally {
       setFormLoading(false);
@@ -221,9 +273,16 @@ export default function DashboardPage() {
                   <h2 className="font-display text-xl font-bold text-ink mb-1 truncate" title={ev.name}>
                     {ev.name}
                   </h2>
-                  <p className="text-xs text-dim mb-5 font-mono truncate bg-chalk border border-border inline-block px-2 py-1 rounded-md">
-                    ID: {ev.id.split("-")[0]}...
-                  </p>
+                  <div className="flex items-center gap-2 mb-5">
+                    {ev.username && (
+                      <span className="text-xs font-bold text-accent-dark bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-md">
+                        @{ev.username}
+                      </span>
+                    )}
+                    <span className="text-xs text-dim font-mono truncate bg-chalk border border-border px-2 py-0.5 rounded-md">
+                      ID: {ev.id.split("-")[0]}...
+                    </span>
+                  </div>
 
                   <div className="flex items-center justify-between mb-6">
                     <span
@@ -295,7 +354,7 @@ export default function DashboardPage() {
               </h3>
               <p className="text-sm text-dim mt-1">
                 {modalMode === "CREATE"
-                  ? "Link your Google Drive folder"
+                  ? "Link your Google Drive folder & set a username"
                   : "Modify event details below"}
               </p>
             </div>
@@ -303,7 +362,7 @@ export default function DashboardPage() {
             <form onSubmit={handleFormSubmit} className="space-y-5">
               <div>
                 <label className="block text-sm font-semibold text-ink mb-1.5 ml-1">
-                  Event Name
+                  Event Name <span className="text-danger font-semibold text-xs">*</span>
                 </label>
                 <input
                   type="text"
@@ -319,7 +378,45 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-sm font-semibold text-ink mb-1.5 ml-1">
-                  Google Drive Folder URL
+                  Collection Username / Handle <span className="text-danger font-semibold text-xs">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3 text-dim text-sm font-bold">@</span>
+                  <input
+                    type="text"
+                    required
+                    className={`w-full pl-9 pr-4 py-3 bg-chalk border ${
+                      usernameCheckStatus === "available"
+                        ? "border-success focus:ring-success"
+                        : usernameCheckStatus === "taken"
+                        ? "border-danger focus:ring-danger"
+                        : "border-border focus:ring-accent"
+                    } rounded-xl outline-none transition-all text-ink font-medium placeholder:text-dim text-sm`}
+                    placeholder="e.g. nimals-birthday"
+                    value={eventUsername}
+                    onChange={(e) => setEventUsername(e.target.value.toLowerCase().replace(/\s+/g, "-"))}
+                  />
+                </div>
+                {usernameMessage ? (
+                  <p
+                    className={`text-xs mt-1 ml-1 font-bold flex items-center gap-1 ${
+                      usernameCheckStatus === "available"
+                        ? "text-success"
+                        : usernameCheckStatus === "taken"
+                        ? "text-danger"
+                        : "text-dim animate-pulse"
+                    }`}
+                  >
+                    {usernameMessage}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-dim mt-1 ml-1">Guests can search by this username instead of using links.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-ink mb-1.5 ml-1">
+                  Google Drive Folder URL <span className="text-danger font-semibold text-xs">*</span>
                 </label>
                 <input
                   type="url"
@@ -341,10 +438,10 @@ export default function DashboardPage() {
 
               <button
                 type="submit"
-                disabled={formLoading}
+                disabled={formLoading || usernameCheckStatus === "taken"}
                 className="w-full py-3.5 rounded-xl text-chalk font-semibold text-base
                            transition-all bg-ink hover:bg-ink/80 hover:-translate-y-0.5
-                           disabled:opacity-40 disabled:hover:translate-y-0"
+                           disabled:opacity-40 disabled:hover:translate-y-0 cursor-pointer disabled:cursor-not-allowed"
               >
                 {formLoading ? "Saving..." : modalMode === "CREATE" ? "Create Event" : "Save Changes"}
               </button>
@@ -371,13 +468,16 @@ export default function DashboardPage() {
               <h3 className="font-display text-xl font-bold text-ink truncate px-4">
                 {selectedEvent.name}
               </h3>
+              {selectedEvent.username && (
+                <p className="text-xs font-bold text-accent-dark mt-1">@{selectedEvent.username}</p>
+              )}
               <p className="text-sm text-dim mt-1">Scan or share this link with guests</p>
             </div>
 
             <div className="flex justify-center mb-8">
               <div className="bg-surface p-4 rounded-2xl border border-border">
                 <QRCodeSVG
-                  value={getGuestLink(selectedEvent.id)}
+                  value={getGuestLink(selectedEvent)}
                   size={180}
                   level="H"
                   className="rounded-lg"
@@ -389,11 +489,11 @@ export default function DashboardPage() {
               <input
                 type="text"
                 readOnly
-                value={getGuestLink(selectedEvent.id)}
+                value={getGuestLink(selectedEvent)}
                 className="bg-transparent text-sm text-dim w-full outline-none px-3 font-mono"
               />
               <button
-                onClick={() => handleCopyLink(getGuestLink(selectedEvent.id))}
+                onClick={() => handleCopyLink(getGuestLink(selectedEvent))}
                 className={`ml-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
                   copied ? "bg-success text-chalk" : "bg-surface text-ink border border-border"
                 }`}
