@@ -42,6 +42,8 @@ export interface Event {
   cover_photo_url: string | null;
   total_photos: number;
   status: EventStatus;
+  qr_token?: string;
+  username?: string;
 }
 
 export interface Photo {

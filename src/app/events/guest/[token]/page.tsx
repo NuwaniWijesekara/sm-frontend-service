@@ -99,8 +99,9 @@ function EventView({
   data: NonNullable<ReturnType<typeof useEventData>["data"]>;
   guestToken: string | null;
 }) {
+  const eventToken = data.event.qr_token || token;
   const { status, statusLabel, results, error, uploadPct, runMatch, reset } =
-    useSelfieMatch(data.event.id);
+    useSelfieMatch(eventToken);
   const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
 
   useEffect(() => {
@@ -133,7 +134,7 @@ function EventView({
             <aside className="w-full lg:w-80 xl:w-96 shrink-0">
               <div className="lg:sticky lg:top-6">
                 <SelfiePanel
-                  eventId={data.event.id}
+                  eventId={eventToken}
                   status={status}
                   statusLabel={statusLabel}
                   results={results}

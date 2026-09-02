@@ -77,8 +77,8 @@ export const useSelfieMatch = (eventId: string) => {
           const matches = await matchSelfie(eventId, blob, undefined, setUploadPct);
           setResults(matches);
           setStatus("done");
-        } catch {
-          setError("Matching failed. Try a well-lit, clear selfie facing the camera.");
+        } catch (err: any) {
+          setError(err.response?.data?.detail || "Matching failed. Try a well-lit, clear selfie facing the camera.");
           setStatus("error");
         }
       }

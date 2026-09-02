@@ -100,8 +100,9 @@ export default function DashboardPage() {
   };
 
   const getGuestLink = (event: EventData) => {
-    const key = event.username || event.qr_token || event.id;
-    return `http://localhost:3000/events/guest/${key}`;
+    const key = event.qr_token || event.id;
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+    return `${origin}/events/guest/${key}`;
   };
 
   const handleCopyLink = (link: string) => {

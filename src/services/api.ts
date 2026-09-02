@@ -56,21 +56,52 @@ export const matchSelfie = async (
   savedFaceId?: string,
   onProgress?: (pct: number) => void
 ): Promise<MatchResult[]> => {
-  const form = new FormData();
-  if (selfieBlob) {
-    form.append("selfie", selfieBlob, "selfie.jpg");
+  let guestToken = typeof window !== "undefined" ? localStorage.getItem("guest_token") : null;
+  if (!guestToken) {
+    try {
+      guestToken = await guestLoginAnonymous();
+      if (typeof window !== "undefined") {
+        localStorage.setItem("guest_token", guestToken);
+      }
+    } catch (e) {
+      console.warn("Auto anonymous guest login failed", e);
+    }
   }
-  if (savedFaceId) {
-    form.append("saved_face_id", savedFaceId);
+
+  const sendRequest = async () => {
+    const form = new FormData();
+    if (selfieBlob) {
+      form.append("selfie", selfieBlob, "selfie.jpg");
+    }
+    if (savedFaceId) {
+      form.append("saved_face_id", savedFaceId);
+    }
+    form.append("event_id", eventId);
+    const { data } = await guestApi.post<{ matches: MatchResult[] }>("/match/selfie", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+      },
+    });
+    return data.matches;
+  };
+
+  try {
+    return await sendRequest();
+  } catch (err: any) {
+    if (err.response?.status === 401 || err.response?.data?.detail === "Invalid token") {
+      try {
+        const newToken = await guestLoginAnonymous();
+        if (typeof window !== "undefined") {
+          localStorage.setItem("guest_token", newToken);
+        }
+        return await sendRequest();
+      } catch (retryErr) {
+        throw err;
+      }
+    }
+    throw err;
   }
-  form.append("event_id", eventId);
-  const { data } = await guestApi.post<{ matches: MatchResult[] }>("/match/selfie", form, {
-    headers: { "Content-Type": "multipart/form-data" },
-    onUploadProgress: (e) => {
-      if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
-    },
-  });
-  return data.matches;
 };
 
 // ── Guest: Auth ─────────────────────────────────────────────
