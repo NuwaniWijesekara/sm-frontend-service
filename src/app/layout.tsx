@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${playfair.variable} ${inter.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${playfair.variable} ${inter.variable}`}>
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
         <script
@@ -54,7 +54,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-chalk text-ink font-body antialiased">
+      <body suppressHydrationWarning className="bg-chalk text-ink font-body antialiased">
         {children}
       </body>
     </html>

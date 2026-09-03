@@ -55,6 +55,7 @@ export default function MatchedResults({ results, onReset }: Props) {
             <img
               src={r.thumbnail_url}
               alt="Matched photo"
+              referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
             <a

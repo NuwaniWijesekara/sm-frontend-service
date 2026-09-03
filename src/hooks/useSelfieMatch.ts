@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { validateImageFile, resizeToBlob } from "@/utils/imageUtils";
-import { matchSelfie } from "@/services/api";
+import { matchSelfie, fetchGuestHistory } from "@/services/api";
 import { MatchResult } from "@/types";
 
 export type MatchStatus =
@@ -87,6 +87,35 @@ export const useSelfieMatch = (eventId: string) => {
     [eventId, status]
   );
 
+  const loadHistoryMatch = useCallback(
+    async (searchId: string) => {
+      setStatus("matching");
+      setError(null);
+      setResults([]);
+      try {
+        const history = await fetchGuestHistory();
+        const matchRecord = history.find((h) => h.id === searchId);
+        if (matchRecord && matchRecord.photos) {
+          const matches: MatchResult[] = matchRecord.photos.map((p) => ({
+            photo_id: p.id,
+            s3_url: p.s3_url,
+            thumbnail_url: p.thumbnail_url || p.s3_url,
+            similarity_score: 100,
+          }));
+          setResults(matches);
+          setStatus("done");
+        } else {
+          setStatus("idle");
+        }
+      } catch (err: any) {
+        console.error("Failed to load search history:", err);
+        setError("Could not load previous search results.");
+        setStatus("error");
+      }
+    },
+    []
+  );
+
   const reset = useCallback(() => {
     setStatus("idle");
     setResults([]);
@@ -101,6 +130,7 @@ export const useSelfieMatch = (eventId: string) => {
     error,
     uploadPct,
     runMatch,
+    loadHistoryMatch,
     reset,
   };
 };

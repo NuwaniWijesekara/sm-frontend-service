@@ -342,15 +342,15 @@ export default function GuestDashboard() {
                 {history.map((record) => (
                   <div
                     key={record.id}
-                    className="p-5 bg-chalk/35 border border-border rounded-2xl space-y-4 hover:border-accent/40 transition"
+                    className="p-5 bg-chalk/35 border border-border rounded-2xl space-y-4 hover:border-accent/40 transition shadow-sm"
                   >
                     {/* Event Info Card */}
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
                         <h4 className="font-extrabold text-sm text-ink">{record.event.name}</h4>
-                        <div className="flex items-center gap-4 mt-1 text-[11px] text-dim">
+                        <div className="flex items-center gap-3 text-[11px] text-dim">
                           <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
+                            <Calendar className="w-3 h-3 text-accent-dark" />
                             {new Date(record.event.date).toLocaleDateString()}
                           </span>
                           <span>·</span>
@@ -358,45 +358,26 @@ export default function GuestDashboard() {
                         </div>
                       </div>
                       <Link
-                        href={`/events/guest/${record.event.id}`}
-                        className="px-3 py-1.5 bg-surface hover:bg-chalk border border-border rounded-lg text-[10px] font-bold text-accent-dark transition shadow-sm"
+                        href={`/events/guest/${record.event.qr_token || record.event.id}?search_id=${record.id}`}
+                        className="px-3.5 py-2 bg-ink hover:bg-ink/80 text-chalk rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm self-start sm:self-auto shrink-0"
                       >
-                        Re-search Event →
+                        View Results <ArrowRight className="w-3.5 h-3.5" />
                       </Link>
                     </div>
 
-                    {/* Image Previews */}
-                    {record.photos.length > 0 ? (
-                      <div className="space-y-2">
-                        <p className="text-[10px] uppercase font-bold tracking-wider text-dim">
-                          Matched Photos ({record.photos.length})
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {record.photos.slice(0, 8).map((photo) => (
-                            <a
-                              key={photo.id}
-                              href={photo.s3_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-12 h-12 rounded-lg border border-border overflow-hidden relative bg-chalk hover:border-accent transition shrink-0 block"
-                            >
-                              <img
-                                src={photo.thumbnail_url || photo.s3_url}
-                                alt="Matched face preview"
-                                className="w-full h-full object-cover"
-                              />
-                            </a>
-                          ))}
-                          {record.photos.length > 8 && (
-                            <div className="w-12 h-12 rounded-lg bg-surface border border-border flex items-center justify-center text-[10px] font-bold text-dim shadow-sm">
-                              +{record.photos.length - 8}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="text-xs text-dim italic">No matching photos were surfaced in this search.</p>
-                    )}
+                    {/* Clean Text Summary */}
+                    <div className="flex items-center justify-between pt-3 border-t border-border/60 text-xs">
+                      <span className="font-medium text-dim">Matched Photos</span>
+                      {record.photos.length > 0 ? (
+                        <span className="font-bold text-accent-dark bg-accent/10 px-3 py-1 rounded-full border border-accent/20 text-xs">
+                          {record.photos.length} {record.photos.length === 1 ? "photo" : "photos"} found
+                        </span>
+                      ) : (
+                        <span className="text-xs text-dim italic bg-chalk px-2.5 py-1 rounded-lg border border-border">
+                          No matching photos
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

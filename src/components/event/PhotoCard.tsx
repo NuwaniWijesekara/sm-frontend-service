@@ -31,6 +31,7 @@ export default function PhotoCard({ photo, highlighted }: Props) {
         src={photo.thumbnail_url}
         alt="Event photo"
         loading="lazy"
+        referrerPolicy="no-referrer"
         onLoad={() => setLoaded(true)}
         className={[
           "w-full object-cover transition-opacity duration-300",

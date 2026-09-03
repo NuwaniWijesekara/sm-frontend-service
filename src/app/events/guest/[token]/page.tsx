@@ -1,5 +1,6 @@
 "use client";
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useEventData } from "@/hooks/useEventData";
 import { useSelfieMatch } from "@/hooks/useSelfieMatch";
 import EventHeader from "@/components/event/EventHeader";
@@ -7,7 +8,7 @@ import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
 import PhotoGallery from "@/components/event/PhotoGallary";
 import { fetchSavedFaces, guestLogin, guestRegister, guestLoginAnonymous, guestLoginGoogle, SavedFace } from "@/services/api";
-import { Camera, Lock, User, Sparkles, ArrowRight, UserPlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Camera, Lock, User, Sparkles, ArrowRight, ArrowLeft, UserPlus, AlertCircle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import Script from "next/script";
 
@@ -85,7 +86,13 @@ export default function EventPage({ params }: Props) {
       {showAuthModal && (
         <GuestAuthOverlay onAuthSuccess={handleAuthSuccess} />
       )}
-      <EventView token={token} data={data} guestToken={guestToken} />
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-chalk">
+          <Spinner size="lg" />
+        </div>
+      }>
+        <EventView token={token} data={data} guestToken={guestToken} />
+      </Suspense>
     </>
   );
 }
@@ -99,10 +106,27 @@ function EventView({
   data: NonNullable<ReturnType<typeof useEventData>["data"]>;
   guestToken: string | null;
 }) {
+  const searchParams = useSearchParams();
+  const searchId = searchParams.get("search_id");
+  const faceId = searchParams.get("face_id") || searchParams.get("saved_face_id");
+
   const eventToken = data.event.qr_token || token;
-  const { status, statusLabel, results, error, uploadPct, runMatch, reset } =
+  const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } =
     useSelfieMatch(eventToken);
   const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
+  const [hasAutoMatched, setHasAutoMatched] = useState(false);
+
+  useEffect(() => {
+    if (hasAutoMatched) return;
+
+    if (searchId) {
+      setHasAutoMatched(true);
+      loadHistoryMatch(searchId);
+    } else if (faceId) {
+      setHasAutoMatched(true);
+      runMatch(faceId);
+    }
+  }, [searchId, faceId, loadHistoryMatch, runMatch, hasAutoMatched]);
 
   useEffect(() => {
     if (guestToken) {
@@ -124,6 +148,15 @@ function EventView({
     <main className="min-h-screen bg-chalk">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col justify-between min-h-screen">
         <div>
+          <div className="mb-6">
+            <Link
+              href="/guest-dashboard"
+              className="inline-flex items-center gap-2 text-xs font-bold text-dim hover:text-accent-dark transition-colors bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 px-3.5 py-2 rounded-xl shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+            </Link>
+          </div>
+
           <EventHeader event={data.event} />
 
           <div className="mt-8 flex flex-col lg:flex-row gap-8">
