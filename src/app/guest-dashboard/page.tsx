@@ -46,6 +46,8 @@ export default function GuestDashboard() {
   // Edit face state
   const [editingFaceId, setEditingFaceId] = useState<string | null>(null);
   const [editingFaceName, setEditingFaceName] = useState("");
+  const [deletingFaceTarget, setDeletingFaceTarget] = useState<SavedFace | null>(null);
+  const [isDeletingFace, setIsDeletingFace] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("guest_token");
@@ -119,13 +121,17 @@ export default function GuestDashboard() {
     }
   };
 
-  const handleDeleteFace = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this saved face?")) return;
+  const confirmDeleteFace = async () => {
+    if (!deletingFaceTarget) return;
+    setIsDeletingFace(true);
     try {
-      await deleteSavedFace(id);
-      setFaces(faces.filter((f) => f.id !== id));
+      await deleteSavedFace(deletingFaceTarget.id);
+      setFaces(faces.filter((f) => f.id !== deletingFaceTarget.id));
+      setDeletingFaceTarget(null);
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsDeletingFace(false);
     }
   };
 
@@ -289,7 +295,7 @@ export default function GuestDashboard() {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDeleteFace(face.id)}
+                          onClick={() => setDeletingFaceTarget(face)}
                           className="p-1.5 hover:bg-danger/10 text-dim hover:text-danger rounded border border-transparent hover:border-danger/25 transition"
                           title="Delete profile"
                         >
@@ -399,7 +405,62 @@ export default function GuestDashboard() {
         </div>
       </div>
 
+      {deletingFaceTarget && (
+        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full p-6 md:p-8 relative border border-border transform transition-all text-center">
+            <button
+              onClick={() => {
+                if (!isDeletingFace) setDeletingFaceTarget(null);
+              }}
+              disabled={isDeletingFace}
+              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center
+                         bg-chalk text-dim hover:bg-danger/10 hover:text-danger rounded-full transition-colors disabled:opacity-50"
+            >
+              &times;
+            </button>
 
+            <div className="mb-5 flex justify-center">
+              <div className="w-16 h-16 bg-danger/10 border border-danger/20 rounded-full flex items-center justify-center text-danger">
+                <Trash2 className="w-8 h-8 text-danger" />
+              </div>
+            </div>
+
+            <h3 className="font-display text-xl font-bold text-ink mb-2">
+              Delete Saved Profile?
+            </h3>
+            
+            <p className="text-sm text-dim leading-relaxed mb-6">
+              Are you sure you want to delete <span className="font-bold text-ink font-mono">"{deletingFaceTarget.nickname}"</span>?
+            </p>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDeletingFaceTarget(null)}
+                disabled={isDeletingFace}
+                className="flex-1 py-3 px-4 rounded-xl border border-border bg-chalk hover:bg-surface text-ink text-sm font-semibold transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteFace}
+                disabled={isDeletingFace}
+                className="flex-1 py-3 px-4 rounded-xl bg-danger hover:bg-danger/90 text-chalk text-sm font-semibold transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeletingFace ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-chalk" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Profile"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

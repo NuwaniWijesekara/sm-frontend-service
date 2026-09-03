@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const [driveUrl, setDriveUrl] = useState("");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
+  const [deleteTargetEvent, setDeleteTargetEvent] = useState<EventData | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
   const getToken = () => localStorage.getItem("token");
 
   useEffect(() => {
@@ -171,23 +174,32 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteEvent = async (eventId: string, name: string) => {
+  const openDeleteModal = (event: EventData) => {
+    setDeleteTargetEvent(event);
+    setDeleteError("");
+  };
+
+  const confirmDeleteEvent = async () => {
+    if (!deleteTargetEvent) return;
     const token = getToken();
     if (!token) {
       router.push("/auth");
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete "${name}"? This will also remove all processed photos.`)) {
-      return;
-    }
+    setIsDeleting(true);
+    setDeleteError("");
 
     try {
-      await deleteEvent(eventId);
+      await deleteEvent(deleteTargetEvent.id);
+      setDeleteTargetEvent(null);
       loadEvents();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Delete error:", error);
-      alert("Failed to delete the event.");
+      const detail = error?.response?.data?.detail;
+      setDeleteError(detail || "Failed to delete the event.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -261,7 +273,7 @@ export default function DashboardPage() {
                     ✏️
                   </button>
                   <button
-                    onClick={() => handleDeleteEvent(ev.id, ev.name)}
+                    onClick={() => openDeleteModal(ev)}
                     className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
                                rounded-lg text-dim hover:text-danger transition-colors"
                     title="Delete Event"
@@ -500,6 +512,75 @@ export default function DashboardPage() {
                 }`}
               >
                 {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTargetEvent && (
+        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity animate-in fade-in duration-200">
+          <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full p-6 md:p-8 relative border border-border transform transition-all text-center">
+            <button
+              onClick={() => {
+                if (!isDeleting) {
+                  setDeleteTargetEvent(null);
+                  setDeleteError("");
+                }
+              }}
+              disabled={isDeleting}
+              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center
+                         bg-chalk text-dim hover:bg-danger/10 hover:text-danger rounded-full transition-colors disabled:opacity-50"
+            >
+              &times;
+            </button>
+
+            <div className="mb-5 flex justify-center">
+              <div className="w-16 h-16 bg-danger/10 border border-danger/20 rounded-full flex items-center justify-center text-danger text-2xl">
+                🗑️
+              </div>
+            </div>
+
+            <h3 className="font-display text-xl font-bold text-ink mb-2">
+              Delete Event?
+            </h3>
+            
+            <p className="text-sm text-dim leading-relaxed mb-6">
+              Are you sure you want to delete <span className="font-bold text-ink">"{deleteTargetEvent.name}"</span>? This will also remove all processed photos.
+            </p>
+
+            {deleteError && (
+              <div className="mb-4 p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-xs font-medium">
+                {deleteError}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteTargetEvent(null);
+                  setDeleteError("");
+                }}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 rounded-xl border border-border bg-chalk hover:bg-surface text-ink text-sm font-semibold transition-all disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteEvent}
+                disabled={isDeleting}
+                className="flex-1 py-3 px-4 rounded-xl bg-danger hover:bg-danger/90 text-chalk text-sm font-semibold transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isDeleting ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-chalk border-t-transparent rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  "Delete Event"
+                )}
               </button>
             </div>
           </div>
