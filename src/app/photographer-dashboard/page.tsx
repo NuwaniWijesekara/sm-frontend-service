@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { fetchEvents, createEvent, updateEvent, deleteEvent, checkUsernameAvailability } from "@/services/api";
 
 interface EventData {
@@ -228,6 +229,14 @@ export default function DashboardPage() {
             >
               Logout
             </button>
+            <Link
+              href="/subscription-plans"
+              className="px-5 py-2.5 text-sm font-semibold text-accent-dark
+                         bg-accent/10 hover:bg-accent/20 border border-accent/30 hover:border-accent/50
+                         rounded-xl transition-all hover:-translate-y-0.5 inline-flex items-center gap-1.5"
+            >
+              ✦ Upgrade to Pro
+            </Link>
             <button
               onClick={openCreateModal}
               className="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold

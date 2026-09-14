@@ -220,3 +220,164 @@ export const updateEvent = async (id: string, name: string, drive_url: string, u
 export const deleteEvent = async (id: string) => {
   await api.delete(`/events/${id}`);
 };
+
+// ── Subscriptions ───────────────────────────────────────────
+export interface SubscriptionPayload {
+  user_id: string;
+  package_id: string;
+}
+
+export interface SubscriptionResponse {
+  id: string;
+  user_id: string;
+  package_id: string;
+  status: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const createSubscription = async (
+  payload: SubscriptionPayload
+): Promise<SubscriptionResponse> => {
+  const { data } = await api.post<SubscriptionResponse>(
+    "/api/v1/subscriptions",
+    payload
+  );
+  return data;
+};
+
+export const fetchSubscriptions = async (
+  userId: string
+): Promise<SubscriptionResponse[]> => {
+  const { data } = await api.get<SubscriptionResponse[]>(
+    `/api/v1/subscriptions/${userId}`
+  );
+  return data;
+};
+
+// ── Admin Subscriptions & Packages (Port 8003 Direct) ──────────
+const ADMIN_SUB_URL =
+  process.env.NEXT_PUBLIC_SUBSCRIPTION_SERVICE_URL || "http://localhost:8003";
+
+export const adminSubApi = axios.create({
+  baseURL: ADMIN_SUB_URL,
+  timeout: 15000,
+});
+
+export interface AdminPackage {
+  id: string;
+  app_id: string;
+  name: string;
+  price: number;
+  billing_cycle: string;
+  features?: string[] | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface AdminSubscription {
+  id: string;
+  user_id: string;
+  package_id: string;
+  status: string;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  created_at: string;
+  updated_at: string;
+  package?: AdminPackage | null;
+}
+
+export const fetchAdminPackages = async (appId?: string): Promise<AdminPackage[]> => {
+  const { data } = await adminSubApi.get<AdminPackage[]>("/api/v1/admin/packages", {
+    params: { app_id: appId || undefined },
+  });
+  return data;
+};
+
+export const fetchPackages = fetchAdminPackages;
+
+export const fetchAdminSubscriptions = async (): Promise<AdminSubscription[]> => {
+  const { data } = await adminSubApi.get<AdminSubscription[]>("/api/v1/admin/subscriptions");
+  return data;
+};
+
+export const updateAdminSubscriptionStatus = async (
+  subscriptionId: string,
+  status: string
+): Promise<AdminSubscription> => {
+  const { data } = await adminSubApi.patch<AdminSubscription>(
+    `/api/v1/admin/subscriptions/${subscriptionId}/status`,
+    { status }
+  );
+  return data;
+};
+
+export interface AdminPackageCreatePayload {
+  app_id: string;
+  name: string;
+  price: number;
+  billing_cycle: string;
+  features?: string[] | null;
+}
+
+export const createAdminPackage = async (
+  payload: AdminPackageCreatePayload
+): Promise<AdminPackage> => {
+  const { data } = await adminSubApi.post<AdminPackage>(
+    "/api/v1/admin/packages",
+    payload
+  );
+  return data;
+};
+
+export const updateAdminPackage = async (
+  packageId: string,
+  payload: Partial<AdminPackageCreatePayload>
+): Promise<AdminPackage> => {
+  const { data } = await adminSubApi.put<AdminPackage>(
+    `/api/v1/admin/packages/${packageId}`,
+    payload
+  );
+  return data;
+};
+
+export const deleteAdminPackage = async (
+  packageId: string
+): Promise<{ message: string }> => {
+  const { data } = await adminSubApi.delete<{ message: string }>(
+    `/api/v1/admin/packages/${packageId}`
+  );
+  return data;
+};
+
+// ── Admin Applications / Tenants ──────────────────────────────
+export interface AdminApplication {
+  id: string;
+  app_id: string;
+  name: string;
+  description?: string | null;
+  created_at?: string;
+}
+
+export const fetchAdminApplications = async (): Promise<AdminApplication[]> => {
+  const { data } = await adminSubApi.get<AdminApplication[]>("/api/v1/admin/applications");
+  return data;
+};
+
+export interface AdminApplicationCreatePayload {
+  app_id: string;
+  name: string;
+  description?: string;
+}
+
+export const createAdminApplication = async (
+  payload: AdminApplicationCreatePayload
+): Promise<AdminApplication> => {
+  const { data } = await adminSubApi.post<AdminApplication>(
+    "/api/v1/admin/applications",
+    payload
+  );
+  return data;
+};
