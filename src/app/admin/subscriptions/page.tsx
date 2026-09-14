@@ -399,9 +399,6 @@ export default function AdminSubscriptionsPage() {
                 <h1 className="font-display text-xl font-bold tracking-tight text-ink leading-tight">
                   Application Subscriptions & Packages
                 </h1>
-                <p className="text-[11px] text-dim font-medium">
-                  Multi-Tenant Admin Portal • Direct Service Port 8003
-                </p>
               </div>
             </div>
           </div>
