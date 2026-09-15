@@ -95,13 +95,11 @@ export default function SubscriptionPlansPage() {
     setToast(null);
 
     try {
-      const userId =
-        typeof window !== "undefined"
-          ? localStorage.getItem("user_id") || "550e8400-e29b-41d4-a716-446655440000"
-          : "550e8400-e29b-41d4-a716-446655440000";
-
+      // The subscriber's identity now comes from the caller's JWT (attached
+      // automatically by the `api` client) — the backend rejects the request
+      // with 401 if the user isn't logged in, rather than silently attaching
+      // it to a placeholder account.
       const res = await createSubscription({
-        user_id: userId,
         package_id: plan.package_id,
       });
 

@@ -3,11 +3,15 @@ import { EventPageData, MatchResult } from "@/types";
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// Photographer-facing client
+// Photographer-facing client.
+// Also used for /api/v1/subscriptions/* calls, which now require a Bearer
+// token (the backend derives the user id from it — a client-supplied user_id
+// is no longer trusted). Falls back to the guest token so guest users hitting
+// subscription endpoints are still authenticated.
 export const api = axios.create({ baseURL, timeout: 60000 });
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("token") || localStorage.getItem("guest_token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -18,15 +22,6 @@ export const guestApi = axios.create({ baseURL, timeout: 60000 });
 guestApi.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("guest_token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Auth token injector
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("guest_token") || localStorage.getItem("token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -222,8 +217,10 @@ export const deleteEvent = async (id: string) => {
 };
 
 // ── Subscriptions ───────────────────────────────────────────
+// user_id is intentionally not part of this payload: the backend derives the
+// subscriber's identity from the caller's JWT (see `api` client above), never
+// from client-supplied input.
 export interface SubscriptionPayload {
-  user_id: string;
   package_id: string;
 }
 
@@ -257,15 +254,6 @@ export const fetchSubscriptions = async (
   return data;
 };
 
-// ── Admin Subscriptions & Packages (Port 8003 Direct) ──────────
-const ADMIN_SUB_URL =
-  process.env.NEXT_PUBLIC_SUBSCRIPTION_SERVICE_URL || "http://localhost:8003";
-
-export const adminSubApi = axios.create({
-  baseURL: ADMIN_SUB_URL,
-  timeout: 15000,
-});
-
 export interface AdminPackage {
   id: string;
   app_id: string;
@@ -277,107 +265,10 @@ export interface AdminPackage {
   updated_at?: string;
 }
 
-export interface AdminSubscription {
-  id: string;
-  user_id: string;
-  package_id: string;
-  status: string;
-  current_period_start: string | null;
-  current_period_end: string | null;
-  created_at: string;
-  updated_at: string;
-  package?: AdminPackage | null;
-}
-
-export const fetchAdminPackages = async (appId?: string): Promise<AdminPackage[]> => {
-  const { data } = await adminSubApi.get<AdminPackage[]>("/api/v1/admin/packages", {
+export const fetchPackages = async (appId?: string): Promise<AdminPackage[]> => {
+  const { data } = await axios.get<AdminPackage[]>("http://localhost:8003/api/v1/packages", {
     params: { app_id: appId || undefined },
   });
   return data;
 };
-
-export const fetchPackages = fetchAdminPackages;
-
-export const fetchAdminSubscriptions = async (): Promise<AdminSubscription[]> => {
-  const { data } = await adminSubApi.get<AdminSubscription[]>("/api/v1/admin/subscriptions");
-  return data;
-};
-
-export const updateAdminSubscriptionStatus = async (
-  subscriptionId: string,
-  status: string
-): Promise<AdminSubscription> => {
-  const { data } = await adminSubApi.patch<AdminSubscription>(
-    `/api/v1/admin/subscriptions/${subscriptionId}/status`,
-    { status }
-  );
-  return data;
-};
-
-export interface AdminPackageCreatePayload {
-  app_id: string;
-  name: string;
-  price: number;
-  billing_cycle: string;
-  features?: string[] | null;
-}
-
-export const createAdminPackage = async (
-  payload: AdminPackageCreatePayload
-): Promise<AdminPackage> => {
-  const { data } = await adminSubApi.post<AdminPackage>(
-    "/api/v1/admin/packages",
-    payload
-  );
-  return data;
-};
-
-export const updateAdminPackage = async (
-  packageId: string,
-  payload: Partial<AdminPackageCreatePayload>
-): Promise<AdminPackage> => {
-  const { data } = await adminSubApi.put<AdminPackage>(
-    `/api/v1/admin/packages/${packageId}`,
-    payload
-  );
-  return data;
-};
-
-export const deleteAdminPackage = async (
-  packageId: string
-): Promise<{ message: string }> => {
-  const { data } = await adminSubApi.delete<{ message: string }>(
-    `/api/v1/admin/packages/${packageId}`
-  );
-  return data;
-};
-
-// ── Admin Applications / Tenants ──────────────────────────────
-export interface AdminApplication {
-  id: string;
-  app_id: string;
-  name: string;
-  description?: string | null;
-  created_at?: string;
-}
-
-export const fetchAdminApplications = async (): Promise<AdminApplication[]> => {
-  const { data } = await adminSubApi.get<AdminApplication[]>("/api/v1/admin/applications");
-  return data;
-};
-
-export interface AdminApplicationCreatePayload {
-  app_id: string;
-  name: string;
-  description?: string;
-}
-
-export const createAdminApplication = async (
-  payload: AdminApplicationCreatePayload
-): Promise<AdminApplication> => {
-  const { data } = await adminSubApi.post<AdminApplication>(
-    "/api/v1/admin/applications",
-    payload
-  );
-  return data;
-};
+
