@@ -224,6 +224,15 @@ export interface SubscriptionPayload {
   package_id: string;
 }
 
+export interface SubscriptionPackageSummary {
+  id: string;
+  app_id: string;
+  name: string;
+  price: number;
+  billing_cycle: string;
+  features?: string[] | null;
+}
+
 export interface SubscriptionResponse {
   id: string;
   user_id: string;
@@ -233,12 +242,19 @@ export interface SubscriptionResponse {
   current_period_end: string | null;
   created_at: string;
   updated_at: string;
+  package?: SubscriptionPackageSummary | null;
+}
+
+export interface CheckoutResponse {
+  subscription: SubscriptionResponse;
+  checkout_url: string;
+  session_id: string;
 }
 
 export const createSubscription = async (
   payload: SubscriptionPayload
-): Promise<SubscriptionResponse> => {
-  const { data } = await api.post<SubscriptionResponse>(
+): Promise<CheckoutResponse> => {
+  const { data } = await api.post<CheckoutResponse>(
     "/api/v1/subscriptions",
     payload
   );
@@ -250,6 +266,21 @@ export const fetchSubscriptions = async (
 ): Promise<SubscriptionResponse[]> => {
   const { data } = await api.get<SubscriptionResponse[]>(
     `/api/v1/subscriptions/${userId}`
+  );
+  return data;
+};
+
+// ── Dummy payment gateway ────────────────────────────────────
+// Simulates the payment provider calling us back after the user "pays" on
+// the mock checkout page (see /dummy-checkout). Public endpoint on the
+// backend — the `api` client may still attach a Bearer token if one exists
+// in localStorage, but the route itself doesn't require one.
+export const confirmDummyPayment = async (
+  sessionId: string
+): Promise<SubscriptionResponse> => {
+  const { data } = await api.post<SubscriptionResponse>(
+    "/api/v1/webhooks/dummy",
+    { session_id: sessionId }
   );
   return data;
 };
@@ -266,7 +297,7 @@ export interface AdminPackage {
 }
 
 export const fetchPackages = async (appId?: string): Promise<AdminPackage[]> => {
-  const { data } = await axios.get<AdminPackage[]>("http://localhost:8003/api/v1/packages", {
+  const { data } = await api.get<AdminPackage[]>("/api/v1/packages", {
     params: { app_id: appId || undefined },
   });
   return data;

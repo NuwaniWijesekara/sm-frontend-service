@@ -3,7 +3,15 @@ import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { fetchEvents, createEvent, updateEvent, deleteEvent, checkUsernameAvailability } from "@/services/api";
+import {
+  fetchEvents,
+  createEvent,
+  updateEvent,
+  deleteEvent,
+  checkUsernameAvailability,
+  fetchSubscriptions,
+  SubscriptionResponse,
+} from "@/services/api";
 
 interface EventData {
   id: string;
@@ -33,6 +41,8 @@ export default function DashboardPage() {
   const [deleteTargetEvent, setDeleteTargetEvent] = useState<EventData | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [activeSubscription, setActiveSubscription] = useState<SubscriptionResponse | null>(null);
+  const [subscriptionChecked, setSubscriptionChecked] = useState(false);
   const getToken = () => localStorage.getItem("token");
 
   useEffect(() => {
@@ -86,6 +96,32 @@ export default function DashboardPage() {
     }
   };
 
+  // Best-effort: decode the photographer's own user id out of their JWT so we
+  // can ask the subscription-service (via the gateway) whether they have an
+  // active plan. No signature verification here — this only drives what
+  // badge/banner to show; the backend independently enforces real access.
+  const loadSubscription = async () => {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const parts = token.split(".");
+      if (parts.length !== 3) return;
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      const userId = payload.sub;
+      if (!userId) return;
+
+      const subs = await fetchSubscriptions(userId);
+      const active = subs.find((s) => s.status.toLowerCase() === "active") || null;
+      setActiveSubscription(active);
+    } catch (err: any) {
+      // 404 (no subscriptions found) is expected for free users — anything
+      // else, just fall back to "no active subscription" for display purposes.
+      setActiveSubscription(null);
+    } finally {
+      setSubscriptionChecked(true);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -93,6 +129,7 @@ export default function DashboardPage() {
       return;
     }
     loadEvents();
+    loadSubscription();
     if (isFormModalOpen) return;
     const interval = setInterval(loadEvents, 8000);
     return () => clearInterval(interval);
@@ -212,9 +249,21 @@ export default function DashboardPage() {
             <p className="text-xs font-semibold tracking-widest uppercase text-accent mb-1">
               Studio Dashboard
             </p>
-            <h1 className="font-display text-3xl md:text-4xl font-bold text-ink tracking-tight">
-              Photographer Studio
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="font-display text-3xl md:text-4xl font-bold text-ink tracking-tight">
+                Photographer Studio
+              </h1>
+              {activeSubscription && (
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px]
+                             font-bold uppercase tracking-wider bg-accent/15 text-accent-dark
+                             border border-accent/30 shadow-xs shrink-0"
+                  title={`Active subscription: ${activeSubscription.package?.name || "Pro"}`}
+                >
+                  ✦ {activeSubscription.package?.name || "Pro"}
+                </span>
+              )}
+            </div>
             <p className="text-dim text-sm mt-1">
               Manage your events and guest links seamlessly.
             </p>
@@ -229,14 +278,16 @@ export default function DashboardPage() {
             >
               Logout
             </button>
-            <Link
-              href="/subscription-plans"
-              className="px-5 py-2.5 text-sm font-semibold text-accent-dark
-                         bg-accent/10 hover:bg-accent/20 border border-accent/30 hover:border-accent/50
-                         rounded-xl transition-all hover:-translate-y-0.5 inline-flex items-center gap-1.5"
-            >
-              ✦ Upgrade to Pro
-            </Link>
+            {subscriptionChecked && !activeSubscription && (
+              <Link
+                href="/subscription-plans"
+                className="px-5 py-2.5 text-sm font-semibold text-accent-dark
+                           bg-accent/10 hover:bg-accent/20 border border-accent/30 hover:border-accent/50
+                           rounded-xl transition-all hover:-translate-y-0.5 inline-flex items-center gap-1.5"
+              >
+                ✦ Upgrade to Pro
+              </Link>
+            )}
             <button
               onClick={openCreateModal}
               className="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold

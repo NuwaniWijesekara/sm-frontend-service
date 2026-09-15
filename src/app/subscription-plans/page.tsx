@@ -103,15 +103,20 @@ export default function SubscriptionPlansPage() {
         package_id: plan.package_id,
       });
 
-      setToast({
-        message: `🎉  ${plan.name} subscription created — Status: ${res.status.toUpperCase()}`,
-        type: "success",
+      // Carry plan details along in the query string purely for display on
+      // the mock checkout page — the backend's checkout_url only knows the
+      // session id, not what to show the user.
+      const displayParams = new URLSearchParams({
+        plan: plan.name,
+        price: plan.price,
+        period: plan.period,
       });
+      const separator = res.checkout_url.includes("?") ? "&" : "?";
+      router.push(`${res.checkout_url}${separator}${displayParams.toString()}`);
     } catch (err: any) {
       const detail =
         err?.response?.data?.detail || "Something went wrong. Please try again.";
       setToast({ message: detail, type: "error" });
-    } finally {
       setLoadingPlanId(null);
     }
   };
