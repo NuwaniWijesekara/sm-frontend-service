@@ -111,11 +111,16 @@ export default function DashboardPage() {
       const userId = payload.sub;
       if (!userId) return;
 
+      // subscription-service always resolves to an active subscription now —
+      // real if the user bought one, otherwise a virtual one against
+      // whatever package is configured as the Free tier — so `active` here
+      // is effectively "the user's current plan," not "whether they paid."
       const subs = await fetchSubscriptions(userId);
       const active = subs.find((s) => s.status.toLowerCase() === "active") || null;
       setActiveSubscription(active);
     } catch (err: any) {
-      // 404 (no subscriptions found) is expected for free users — anything
+      // A 404 here now only means the backend has no Free package configured
+      // at all (a config error, not a normal free-user case) — anything
       // else, just fall back to "no active subscription" for display purposes.
       setActiveSubscription(null);
     } finally {
@@ -300,7 +305,10 @@ export default function DashboardPage() {
             >
               Logout
             </button>
-            {subscriptionChecked && !activeSubscription && (
+            {subscriptionChecked &&
+              (!activeSubscription ||
+                activeSubscription.package?.price === 0 ||
+                activeSubscription.package?.name?.toLowerCase() === "free") && (
               <Link
                 href="/subscription-plans"
                 className="px-5 py-2.5 text-sm font-semibold text-accent-dark
