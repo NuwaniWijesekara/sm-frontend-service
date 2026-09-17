@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import axios from "axios";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -203,13 +204,34 @@ export default function DashboardPage() {
       }
       setIsFormModalOpen(false);
       loadEvents();
-    } catch (error: any) {
-      const detail = error.response?.data?.detail;
-      setFormError(detail || `Failed to ${modalMode.toLowerCase()} event.`);
-      console.error(error);
-    } finally {
+    } catch (error) {
+      // Log a plain string, never the raw Error/AxiosError instance — Next's
+      // dev overlay hooks console.error and surfaces any Error object passed
+      // to it as an "Issue" even though it's already fully handled here, which
+      // is what made this look like an unhandled rejection. The inline
+      // formError below (rendered right above the submit button) is the only
+      // UI surface this failure should ever reach — a bottom-of-screen toast
+      // reads as disconnected from the modal the user is actually looking at.
+      const isForbidden = axios.isAxiosError(error) && error.response?.status === 403;
+      console.warn(
+        `[handleFormSubmit] ${modalMode} event failed (${isForbidden ? 403 : "error"}):`,
+        axios.isAxiosError(error) ? error.message : String(error)
+      );
+
+      // A 403 here means the backend's plan-limit check rejected the create
+      // (see sm-photographer-service's max_events enforcement) — a normal,
+      // expected outcome, not a bug, so it gets its own friendly message
+      // instead of falling into the generic failure message below.
+      if (isForbidden) {
+        const detail = error.response?.data?.detail;
+        setFormError(detail || "Event limit reached. Please upgrade your package.");
+      } else {
+        setFormError(modalMode === "CREATE" ? "Failed to create event." : "Failed to update event.");
+      }
       setFormLoading(false);
+      return;
     }
+    setFormLoading(false);
   };
 
   const openDeleteModal = (event: EventData) => {
