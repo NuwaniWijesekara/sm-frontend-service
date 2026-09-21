@@ -199,7 +199,7 @@ export const deleteEvent = async (id: string) => {
 };
 
 // ── Collaborators ────────────────────────────────────────────
-export type CollaboratorPermission = "VIEW_ONLY" | "CAN_UPLOAD" | "ADMIN";
+export type CollaboratorPermission = "VIEW_ONLY" | "CAN_UPLOAD";
 
 export interface SharedEventData {
   id: string;

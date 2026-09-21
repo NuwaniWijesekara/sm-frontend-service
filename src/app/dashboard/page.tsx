@@ -39,7 +39,6 @@ type DashboardTab = "my-events" | "shared";
 const PERMISSION_LABELS: Record<string, string> = {
   VIEW_ONLY: "View Only",
   CAN_UPLOAD: "Can Upload",
-  ADMIN: "Admin",
 };
 
 export default function DashboardPage() {
@@ -82,6 +81,11 @@ export default function DashboardPage() {
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [roleUpdatedUserId, setRoleUpdatedUserId] = useState<string | null>(null);
+  const [uploadModalTargetEvent, setUploadModalTargetEvent] = useState<SharedEventData | null>(null);
+  const [uploadDriveUrl, setUploadDriveUrl] = useState("");
+  const [uploadSubmitting, setUploadSubmitting] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
   const getToken = () => localStorage.getItem("token");
 
   // Best-effort: decode the caller's own user id out of their JWT — used to
@@ -297,6 +301,46 @@ export default function DashboardPage() {
       setCollaboratorsListError(typeof detail === "string" ? detail : "Failed to update role.");
     } finally {
       setUpdatingUserId(null);
+    }
+  };
+
+  const openUploadModal = (event: SharedEventData) => {
+    setUploadModalTargetEvent(event);
+    setUploadDriveUrl(event.drive_url || "");
+    setUploadError("");
+    setUploadSuccess("");
+  };
+
+  const closeUploadModal = () => {
+    if (uploadSubmitting) return;
+    setUploadModalTargetEvent(null);
+    setUploadError("");
+    setUploadSuccess("");
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadModalTargetEvent || !uploadDriveUrl.trim()) return;
+
+    setUploadSubmitting(true);
+    setUploadError("");
+    setUploadSuccess("");
+    try {
+      // Same PUT /events/{id} the owner's edit-event modal uses — a
+      // CAN_UPLOAD collaborator just submits a new Drive link, keeping the
+      // event's name/username as-is.
+      await updateEvent(
+        uploadModalTargetEvent.id,
+        uploadModalTargetEvent.name,
+        uploadDriveUrl.trim(),
+        uploadModalTargetEvent.username || ""
+      );
+      setUploadSuccess("Drive link updated — photos will start syncing shortly.");
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setUploadError(typeof detail === "string" ? detail : "Failed to update the Drive link. Please try again.");
+    } finally {
+      setUploadSubmitting(false);
     }
   };
 
@@ -658,7 +702,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="font-display text-2xl font-bold text-ink mb-2">Nothing Shared Yet</h2>
             <p className="text-dim max-w-md mx-auto">
-              Events that other users add you to as a collaborator (with View, Upload, or Admin access) will show up here.
+              Events that other users add you to as a collaborator (with View Only or Can Upload access) will show up here.
             </p>
           </div>
         ) : (
@@ -688,14 +732,27 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex-grow" />
-                <button
-                  onClick={() => router.push(`/events/guest/${ev.qr_token || ev.id}`)}
-                  className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
-                             text-ink hover:text-accent-dark border border-border hover:border-accent/30
-                             py-3 rounded-xl text-sm font-semibold transition-all duration-300"
-                >
-                  Open Event
-                </button>
+                <div className="flex items-center gap-2 mt-4 relative z-10">
+                  <button
+                    onClick={() => router.push(`/events/guest/${ev.qr_token || ev.id}`)}
+                    className="flex-1 bg-chalk hover:bg-accent/10
+                               text-ink hover:text-accent-dark border border-border hover:border-accent/30
+                               py-3 rounded-xl text-sm font-semibold transition-all duration-300"
+                  >
+                    Open Event
+                  </button>
+                  {ev.permission === "CAN_UPLOAD" && (
+                    <button
+                      onClick={() => openUploadModal(ev)}
+                      title="Upload Photos (update Drive link)"
+                      className="shrink-0 w-11 h-11 flex items-center justify-center bg-chalk hover:bg-accent/10
+                                 text-ink hover:text-accent-dark border border-border hover:border-accent/30
+                                 rounded-xl transition-all duration-300 text-base"
+                    >
+                      ☁️
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -989,7 +1046,6 @@ export default function DashboardPage() {
                 >
                   <option value="VIEW_ONLY">View Only</option>
                   <option value="CAN_UPLOAD">Can Upload</option>
-                  <option value="ADMIN">Admin</option>
                 </select>
                 <button
                   type="submit"
@@ -1141,7 +1197,6 @@ export default function DashboardPage() {
                             >
                               <option value="VIEW_ONLY">View Only</option>
                               <option value="CAN_UPLOAD">Can Upload</option>
-                              <option value="ADMIN">Admin</option>
                             </select>
                             <button
                               onClick={() => handleRemoveCollaborator(c.user_id)}
@@ -1168,6 +1223,70 @@ export default function DashboardPage() {
                 })()}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {uploadModalTargetEvent && (
+        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
+          <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full p-6 md:p-8 relative border border-border transform transition-all">
+            <button
+              onClick={closeUploadModal}
+              disabled={uploadSubmitting}
+              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center
+                         bg-chalk text-dim hover:bg-danger/10 hover:text-danger rounded-full transition-colors disabled:opacity-50"
+            >
+              &times;
+            </button>
+
+            <div className="mb-6">
+              <span className="inline-block p-3 bg-chalk border border-border rounded-2xl mb-3">
+                <span className="text-2xl">☁️</span>
+              </span>
+              <h3 className="font-display text-2xl font-bold text-ink">Upload Photos</h3>
+              <p className="text-sm text-dim mt-1 truncate">{uploadModalTargetEvent.name}</p>
+            </div>
+
+            <form onSubmit={handleUploadSubmit} className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-ink mb-1.5 ml-1">
+                  Google Drive Folder URL <span className="text-danger font-semibold text-xs">*</span>
+                </label>
+                <input
+                  type="url"
+                  required
+                  disabled={uploadSubmitting}
+                  className="w-full px-4 py-3 bg-chalk border border-border rounded-xl
+                             focus:bg-surface focus:ring-2 focus:ring-accent focus:border-accent
+                             outline-none transition-all text-ink font-medium placeholder:text-dim
+                             disabled:opacity-60"
+                  placeholder="https://drive.google.com/drive/folders/..."
+                  value={uploadDriveUrl}
+                  onChange={(e) => setUploadDriveUrl(e.target.value)}
+                />
+              </div>
+
+              {uploadError && (
+                <div className="p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-sm font-medium text-center">
+                  {uploadError}
+                </div>
+              )}
+              {uploadSuccess && (
+                <div className="p-3 bg-success/10 text-success border border-success/20 rounded-xl text-sm font-medium text-center">
+                  {uploadSuccess}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={uploadSubmitting || !uploadDriveUrl.trim()}
+                className="w-full py-3.5 rounded-xl text-chalk font-semibold text-base
+                           transition-all bg-ink hover:bg-ink/80 hover:-translate-y-0.5
+                           disabled:opacity-40 disabled:hover:translate-y-0 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {uploadSubmitting ? "Submitting..." : "Submit"}
+              </button>
+            </form>
           </div>
         </div>
       )}
