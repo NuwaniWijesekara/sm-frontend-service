@@ -13,11 +13,13 @@ import {
   fetchSubscriptions,
   fetchSharedEvents,
   bulkAddCollaborators,
+  addCollaborator,
   fetchReferenceFace,
   uploadReferenceFace,
   SubscriptionResponse,
   SharedEventData,
   BulkImportResponse,
+  CollaboratorPermission,
 } from "@/services/api";
 
 interface EventData {
@@ -66,6 +68,11 @@ export default function DashboardPage() {
   const [bulkResult, setBulkResult] = useState<BulkImportResponse | null>(null);
   const [bulkError, setBulkError] = useState("");
   const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualPermission, setManualPermission] = useState<CollaboratorPermission>("VIEW_ONLY");
+  const [manualAdding, setManualAdding] = useState(false);
+  const [manualError, setManualError] = useState("");
+  const [manualSuccess, setManualSuccess] = useState("");
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [referenceFaceUrl, setReferenceFaceUrl] = useState<string | null>(null);
   const [referenceFaceLoading, setReferenceFaceLoading] = useState(false);
@@ -185,13 +192,40 @@ export default function DashboardPage() {
     setCollaboratorsTargetEvent(event);
     setBulkResult(null);
     setBulkError("");
+    setManualEmail("");
+    setManualPermission("VIEW_ONLY");
+    setManualError("");
+    setManualSuccess("");
   };
 
   const closeCollaboratorsModal = () => {
-    if (bulkUploading) return;
+    if (bulkUploading || manualAdding) return;
     setCollaboratorsTargetEvent(null);
     setBulkResult(null);
     setBulkError("");
+    setManualError("");
+    setManualSuccess("");
+  };
+
+  const handleManualAdd = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!collaboratorsTargetEvent || !manualEmail.trim()) return;
+
+    setManualAdding(true);
+    setManualError("");
+    setManualSuccess("");
+    try {
+      const result = await addCollaborator(collaboratorsTargetEvent.id, manualEmail.trim(), manualPermission);
+      setManualSuccess(`${result.email} added as ${PERMISSION_LABELS[result.permission] || result.permission}.`);
+      setManualEmail("");
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setManualError(
+        typeof detail === "string" ? detail : "Failed to add collaborator. Please check the email and try again."
+      );
+    } finally {
+      setManualAdding(false);
+    }
   };
 
   const handleBulkFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -904,6 +938,59 @@ export default function DashboardPage() {
               </span>
               <h3 className="font-display text-2xl font-bold text-ink">Manage Collaborators</h3>
               <p className="text-sm text-dim mt-1 truncate">{collaboratorsTargetEvent.name}</p>
+            </div>
+
+            {/* Manual Add — one collaborator at a time, like sharing a Drive doc */}
+            <form onSubmit={handleManualAdd} className="mb-6">
+              <label className="block text-xs font-semibold text-ink mb-1.5 ml-1">
+                Add a Collaborator
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="email"
+                  required
+                  placeholder="name@example.com"
+                  value={manualEmail}
+                  onChange={(e) => setManualEmail(e.target.value)}
+                  disabled={manualAdding}
+                  className="flex-1 px-4 py-3 bg-chalk border border-border rounded-xl
+                             focus:bg-surface focus:ring-2 focus:ring-accent focus:border-accent
+                             outline-none transition-all text-ink text-sm font-medium placeholder:text-dim
+                             disabled:opacity-60"
+                />
+                <select
+                  value={manualPermission}
+                  onChange={(e) => setManualPermission(e.target.value as CollaboratorPermission)}
+                  disabled={manualAdding}
+                  className="px-3 py-3 bg-chalk border border-border rounded-xl text-sm text-ink
+                             focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
+                >
+                  <option value="VIEW_ONLY">View Only</option>
+                  <option value="CAN_UPLOAD">Can Upload</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={manualAdding || !manualEmail.trim()}
+                  className="px-5 py-3 rounded-xl text-chalk font-semibold text-sm
+                             transition-all bg-ink hover:bg-ink/80
+                             disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+                >
+                  {manualAdding ? "Adding..." : "Add"}
+                </button>
+              </div>
+              {manualError && (
+                <p className="text-danger text-xs mt-2 ml-1 font-semibold">{manualError}</p>
+              )}
+              {manualSuccess && (
+                <p className="text-success text-xs mt-2 ml-1 font-semibold">✓ {manualSuccess}</p>
+              )}
+            </form>
+
+            <div className="flex items-center gap-3 mb-6">
+              <hr className="flex-1 border-border" />
+              <span className="text-[10px] text-dim font-bold uppercase tracking-wider">or in bulk</span>
+              <hr className="flex-1 border-border" />
             </div>
 
             <div className="bg-chalk border border-border rounded-xl p-4 mb-5">

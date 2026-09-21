@@ -265,6 +265,24 @@ export const bulkAddCollaborators = async (eventId: string, file: File): Promise
   return data;
 };
 
+export interface AddCollaboratorResponse {
+  user_id: string;
+  email: string;
+  permission: CollaboratorPermission;
+}
+
+export const addCollaborator = async (
+  eventId: string,
+  email: string,
+  permission: CollaboratorPermission
+): Promise<AddCollaboratorResponse> => {
+  const { data } = await api.post<AddCollaboratorResponse>(
+    `/api/v1/events/${eventId}/collaborators`,
+    { email, permission }
+  );
+  return data;
+};
+
 // ── Subscriptions ───────────────────────────────────────────
 // user_id is intentionally not part of this payload: the backend derives the
 // subscriber's identity from the caller's JWT (see `api` client above), never
