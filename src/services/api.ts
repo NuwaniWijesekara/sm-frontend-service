@@ -277,6 +277,18 @@ export const removeCollaborator = async (eventId: string, userId: string): Promi
   await api.delete(`/api/v1/events/${eventId}/collaborators/${userId}`);
 };
 
+export const updateCollaboratorPermission = async (
+  eventId: string,
+  userId: string,
+  permission: CollaboratorPermission
+): Promise<Collaborator> => {
+  const { data } = await api.patch<Collaborator>(
+    `/api/v1/events/${eventId}/collaborators/${userId}`,
+    { permission }
+  );
+  return data;
+};
+
 // ── Subscriptions ───────────────────────────────────────────
 // user_id is intentionally not part of this payload: the backend derives the
 // subscriber's identity from the caller's JWT (see `api` client above), never
