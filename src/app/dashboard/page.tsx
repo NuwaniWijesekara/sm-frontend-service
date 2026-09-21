@@ -23,9 +23,20 @@ interface EventData {
   qr_token?: string;
 }
 
+interface SharedEventData extends EventData {
+  owner_name?: string;
+  permission: "view" | "upload";
+}
+
+type DashboardTab = "my-events" | "shared";
+
 export default function DashboardPage() {
   const router = useRouter();
+  const [activeTab, setActiveTab] = useState<DashboardTab>("my-events");
   const [events, setEvents] = useState<EventData[]>([]);
+  // TODO: replace with a real fetchSharedEvents() call once the backend
+  // exposes collaborator-based event access (view/upload permissions).
+  const [sharedEvents, setSharedEvents] = useState<SharedEventData[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -97,7 +108,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Best-effort: decode the photographer's own user id out of their JWT so we
+  // Best-effort: decode the user's own user id out of their JWT so we
   // can ask the subscription-service (via the gateway) whether they have an
   // active plan. No signature verification here — this only drives what
   // badge/banner to show; the backend independently enforces real access.
@@ -271,14 +282,14 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-chalk p-8 font-body">
       <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-4 border-b border-border pb-6">
+        <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 border-b border-border pb-6">
           <div>
             <p className="text-xs font-semibold tracking-widest uppercase text-accent mb-1">
-              Studio Dashboard
+              Event Dashboard
             </p>
             <div className="flex items-center gap-3">
               <h1 className="font-display text-3xl md:text-4xl font-bold text-ink tracking-tight">
-                Photographer Studio
+                Dashboard
               </h1>
               {activeSubscription && (
                 <span
@@ -292,7 +303,7 @@ export default function DashboardPage() {
               )}
             </div>
             <p className="text-dim text-sm mt-1">
-              Manage your events and guest links seamlessly.
+              Manage the events you created, and see what's been shared with you.
             </p>
           </div>
 
@@ -318,119 +329,192 @@ export default function DashboardPage() {
                 ✦ Upgrade to Pro
               </Link>
             )}
-            <button
-              onClick={openCreateModal}
-              className="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold
-                         text-chalk bg-ink border border-transparent rounded-xl
-                         hover:bg-ink/80 transition-all hover:-translate-y-0.5"
-            >
-              <span className="mr-2 text-base">+</span> Create Event
-            </button>
+            {activeTab === "my-events" && (
+              <button
+                onClick={openCreateModal}
+                className="inline-flex items-center justify-center px-6 py-3 text-sm font-semibold
+                           text-chalk bg-ink border border-transparent rounded-xl
+                           hover:bg-ink/80 transition-all hover:-translate-y-0.5"
+              >
+                <span className="mr-2 text-base">+</span> Create Event
+              </button>
+            )}
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-64 space-y-4">
-            <div className="w-10 h-10 border-4 border-border border-t-accent rounded-full animate-spin" />
-            <p className="text-dim font-medium animate-pulse-soft">Syncing your events...</p>
-          </div>
-        ) : events.length === 0 ? (
+        <div className="flex bg-surface p-1 rounded-xl mb-8 border border-border max-w-md">
+          <button
+            type="button"
+            onClick={() => setActiveTab("my-events")}
+            className={`flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition ${
+              activeTab === "my-events" ? "bg-ink text-chalk shadow-sm" : "text-dim hover:text-ink"
+            }`}
+          >
+            My Events
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("shared")}
+            className={`flex-1 text-center py-2.5 rounded-lg text-sm font-bold transition ${
+              activeTab === "shared" ? "bg-ink text-chalk shadow-sm" : "text-dim hover:text-ink"
+            }`}
+          >
+            Shared with Me
+          </button>
+        </div>
+
+        {activeTab === "my-events" ? (
+          loading ? (
+            <div className="flex flex-col items-center justify-center h-64 space-y-4">
+              <div className="w-10 h-10 border-4 border-border border-t-accent rounded-full animate-spin" />
+              <p className="text-dim font-medium animate-pulse-soft">Syncing your events...</p>
+            </div>
+          ) : events.length === 0 ? (
+            <div className="bg-surface border border-border rounded-2xl p-12 text-center">
+              <div className="w-20 h-20 bg-chalk border border-border rounded-full flex items-center justify-center mx-auto mb-6">
+                <span className="text-3xl">📸</span>
+              </div>
+              <h2 className="font-display text-2xl font-bold text-ink mb-2">No Events Yet</h2>
+              <p className="text-dim max-w-md mx-auto">
+                Click the button above to start your first AI photo sync.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {events.map((ev) => (
+                <div
+                  key={ev.id}
+                  className="bg-surface border border-border p-6 rounded-2xl
+                             hover:-translate-y-1 hover:shadow-sm transition-all duration-300
+                             flex flex-col group relative overflow-hidden"
+                >
+                  <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
+                    <button
+                      onClick={() => openEditModal(ev)}
+                      className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
+                                 rounded-lg text-dim hover:text-accent-dark transition-colors"
+                      title="Edit Event"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => openDeleteModal(ev)}
+                      className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
+                                 rounded-lg text-dim hover:text-danger transition-colors"
+                      title="Delete Event"
+                    >
+                      🗑️
+                    </button>
+                  </div>
+
+                  <div className="relative z-10 pr-12">
+                    <h2 className="font-display text-xl font-bold text-ink mb-1 truncate" title={ev.name}>
+                      {ev.name}
+                    </h2>
+                    <div className="flex items-center gap-2 mb-5">
+                      {ev.username && (
+                        <span className="text-xs font-bold text-accent-dark bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-md">
+                          @{ev.username}
+                        </span>
+                      )}
+                      <span className="text-xs text-dim font-mono truncate bg-chalk border border-border px-2 py-0.5 rounded-md">
+                        ID: {ev.id.split("-")[0]}...
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-6">
+                      <span
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
+                          ev.status === "ready"
+                            ? "bg-success/10 text-success border-success/20"
+                            : ev.status === "failed"
+                            ? "bg-danger/10 text-danger border-danger/20"
+                            : "bg-accent/10 text-accent-dark border-accent/20 animate-pulse-soft"
+                        }`}
+                      >
+                        {ev.status === "ready"
+                          ? "✨ READY"
+                          : ev.status === "failed"
+                          ? "❌ FAILED"
+                          : "⏳ PROCESSING"}
+                      </span>
+
+                      <a
+                        href={ev.drive_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-accent-dark text-sm font-medium hover:underline flex items-center transition-colors"
+                      >
+                        Drive ↗
+                      </a>
+                    </div>
+                  </div>
+
+                  <div className="flex-grow" />
+
+                  {ev.status === "ready" ? (
+                    <button
+                      onClick={() => setSelectedEvent(ev)}
+                      className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
+                                 text-ink hover:text-accent-dark border border-border hover:border-accent/30
+                                 py-3 rounded-xl text-sm font-semibold transition-all duration-300"
+                    >
+                      Share with Guests
+                    </button>
+                  ) : (
+                    <div className="w-full mt-4 bg-chalk border border-border py-3 rounded-xl text-sm font-medium text-dim text-center cursor-not-allowed">
+                      Processing faces...
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        ) : sharedEvents.length === 0 ? (
           <div className="bg-surface border border-border rounded-2xl p-12 text-center">
             <div className="w-20 h-20 bg-chalk border border-border rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="text-3xl">📸</span>
+              <span className="text-3xl">🤝</span>
             </div>
-            <h2 className="font-display text-2xl font-bold text-ink mb-2">No Events Yet</h2>
+            <h2 className="font-display text-2xl font-bold text-ink mb-2">Nothing Shared Yet</h2>
             <p className="text-dim max-w-md mx-auto">
-              Click the button above to start your first AI photo sync.
+              Events that other users add you to as a collaborator (with View or Upload access) will show up here.
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {events.map((ev) => (
+            {sharedEvents.map((ev) => (
               <div
                 key={ev.id}
-                className="bg-surface border border-border p-6 rounded-2xl
-                           hover:-translate-y-1 hover:shadow-sm transition-all duration-300
-                           flex flex-col group relative overflow-hidden"
+                className="bg-surface border border-border p-6 rounded-2xl flex flex-col relative overflow-hidden"
               >
-                <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
-                  <button
-                    onClick={() => openEditModal(ev)}
-                    className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
-                               rounded-lg text-dim hover:text-accent-dark transition-colors"
-                    title="Edit Event"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => openDeleteModal(ev)}
-                    className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
-                               rounded-lg text-dim hover:text-danger transition-colors"
-                    title="Delete Event"
-                  >
-                    🗑️
-                  </button>
-                </div>
-
-                <div className="relative z-10 pr-12">
+                <div className="relative z-10">
                   <h2 className="font-display text-xl font-bold text-ink mb-1 truncate" title={ev.name}>
                     {ev.name}
                   </h2>
                   <div className="flex items-center gap-2 mb-5">
-                    {ev.username && (
-                      <span className="text-xs font-bold text-accent-dark bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-md">
-                        @{ev.username}
-                      </span>
+                    {ev.owner_name && (
+                      <span className="text-xs text-dim">by {ev.owner_name}</span>
                     )}
-                    <span className="text-xs text-dim font-mono truncate bg-chalk border border-border px-2 py-0.5 rounded-md">
-                      ID: {ev.id.split("-")[0]}...
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-6">
                     <span
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-full border ${
-                        ev.status === "ready"
-                          ? "bg-success/10 text-success border-success/20"
-                          : ev.status === "failed"
-                          ? "bg-danger/10 text-danger border-danger/20"
-                          : "bg-accent/10 text-accent-dark border-accent/20 animate-pulse-soft"
+                      className={`text-xs font-bold px-2 py-0.5 rounded-md border ${
+                        ev.permission === "upload"
+                          ? "text-accent-dark bg-accent/10 border-accent/20"
+                          : "text-dim bg-chalk border-border"
                       }`}
                     >
-                      {ev.status === "ready"
-                        ? "✨ READY"
-                        : ev.status === "failed"
-                        ? "❌ FAILED"
-                        : "⏳ PROCESSING"}
+                      {ev.permission === "upload" ? "Upload Access" : "View Access"}
                     </span>
-
-                    <a
-                      href={ev.drive_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-accent-dark text-sm font-medium hover:underline flex items-center transition-colors"
-                    >
-                      Drive ↗
-                    </a>
                   </div>
                 </div>
-
                 <div className="flex-grow" />
-
-                {ev.status === "ready" ? (
-                  <button
-                    onClick={() => setSelectedEvent(ev)}
-                    className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
-                               text-ink hover:text-accent-dark border border-border hover:border-accent/30
-                               py-3 rounded-xl text-sm font-semibold transition-all duration-300"
-                  >
-                    Share with Guests
-                  </button>
-                ) : (
-                  <div className="w-full mt-4 bg-chalk border border-border py-3 rounded-xl text-sm font-medium text-dim text-center cursor-not-allowed">
-                    Processing faces...
-                  </div>
-                )}
+                <button
+                  onClick={() => setSelectedEvent(ev)}
+                  className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
+                             text-ink hover:text-accent-dark border border-border hover:border-accent/30
+                             py-3 rounded-xl text-sm font-semibold transition-all duration-300"
+                >
+                  Open Event
+                </button>
               </div>
             ))}
           </div>
@@ -634,7 +718,7 @@ export default function DashboardPage() {
             <h3 className="font-display text-xl font-bold text-ink mb-2">
               Delete Event?
             </h3>
-            
+
             <p className="text-sm text-dim leading-relaxed mb-6">
               Are you sure you want to delete <span className="font-bold text-ink">"{deleteTargetEvent.name}"</span>? This will also remove all processed photos.
             </p>

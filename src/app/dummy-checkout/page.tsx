@@ -94,7 +94,7 @@ function DummyCheckoutView() {
             </p>
           </div>
           <button
-            onClick={() => router.push("/photographer-dashboard")}
+            onClick={() => router.push("/dashboard")}
             className="w-full py-3.5 rounded-xl text-chalk font-semibold bg-ink hover:bg-ink/80 transition-all cursor-pointer"
           >
             Go to Dashboard

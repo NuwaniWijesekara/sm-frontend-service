@@ -3,25 +3,14 @@ import { EventPageData, MatchResult } from "@/types";
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-// Photographer-facing client.
-// Also used for /api/v1/subscriptions/* calls, which now require a Bearer
-// token (the backend derives the user id from it — a client-supplied user_id
-// is no longer trusted). Falls back to the guest token so guest users hitting
-// subscription endpoints are still authenticated.
+// Single client for every backend call. There is only one account model and
+// one token now — every user (event creator, collaborator, or anonymous
+// instant-access guest) is a row in the same Users table and carries the
+// same `token` key in localStorage.
 export const api = axios.create({ baseURL, timeout: 60000 });
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("token") || localStorage.getItem("guest_token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Guest-facing client
-export const guestApi = axios.create({ baseURL, timeout: 60000 });
-guestApi.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem("guest_token");
+    const token = localStorage.getItem("token");
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -29,10 +18,10 @@ guestApi.interceptors.request.use((config) => {
 
 export type FetchError = "invalid_token" | "not_ready" | "network";
 
-// ── Guest: load event by ID ─────────────────────────────────
+// ── Load event by token/username ─────────────────────────────
 export const fetchEventByToken = async (token: string): Promise<EventPageData> => {
   try {
-    const { data } = await guestApi.get<EventPageData>(`/guest/${token}`);
+    const { data } = await api.get<EventPageData>(`/guest/${token}`);
     return data;
   } catch (err) {
     const e = err as AxiosError;
@@ -44,22 +33,22 @@ export const fetchEventByToken = async (token: string): Promise<EventPageData> =
   }
 };
 
-// ── Guest: selfie match ─────────────────────────────────────
+// ── Selfie match ──────────────────────────────────────────────
 export const matchSelfie = async (
   eventId: string,
   selfieBlob?: Blob,
   savedFaceId?: string,
   onProgress?: (pct: number) => void
 ): Promise<MatchResult[]> => {
-  let guestToken = typeof window !== "undefined" ? localStorage.getItem("guest_token") : null;
-  if (!guestToken) {
+  let token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  if (!token) {
     try {
-      guestToken = await guestLoginAnonymous();
+      token = await loginAnonymous();
       if (typeof window !== "undefined") {
-        localStorage.setItem("guest_token", guestToken);
+        localStorage.setItem("token", token);
       }
     } catch (e) {
-      console.warn("Auto anonymous guest login failed", e);
+      console.warn("Auto anonymous login failed", e);
     }
   }
 
@@ -72,7 +61,7 @@ export const matchSelfie = async (
       form.append("saved_face_id", savedFaceId);
     }
     form.append("event_id", eventId);
-    const { data } = await guestApi.post<{ matches: MatchResult[] }>("/match/selfie", form, {
+    const { data } = await api.post<{ matches: MatchResult[] }>("/match/selfie", form, {
       headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (e) => {
         if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
@@ -86,9 +75,9 @@ export const matchSelfie = async (
   } catch (err: any) {
     if (err.response?.status === 401 || err.response?.data?.detail === "Invalid token") {
       try {
-        const newToken = await guestLoginAnonymous();
+        const newToken = await loginAnonymous();
         if (typeof window !== "undefined") {
-          localStorage.setItem("guest_token", newToken);
+          localStorage.setItem("token", newToken);
         }
         return await sendRequest();
       } catch (retryErr) {
@@ -99,23 +88,31 @@ export const matchSelfie = async (
   }
 };
 
-// ── Guest: Auth ─────────────────────────────────────────────
-export const guestRegister = async (name: string, email: string, password: string): Promise<void> => {
-  await guestApi.post("/guest/auth/register", { name, email, password });
+// ── Unified Auth ──────────────────────────────────────────────
+// Every user — event creator, collaborator, or anonymous instant-access
+// guest — is a row in the same Users table and goes through these same
+// endpoints, all issuing the same standard JWT.
+export const signup = async (email: string, password: string, name?: string): Promise<void> => {
+  await api.post("/auth/signup", { email, password, name });
 };
 
-export const guestLogin = async (email: string, password: string): Promise<string> => {
-  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/login", { email, password });
+export const login = async (email: string, password: string): Promise<string> => {
+  const form = new URLSearchParams();
+  form.append("username", email);
+  form.append("password", password);
+  const { data } = await api.post<{ access_token: string }>("/auth/login", form.toString(), {
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
   return data.access_token;
 };
 
-export const guestLoginAnonymous = async (): Promise<string> => {
-  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/anonymous");
+export const loginAnonymous = async (): Promise<string> => {
+  const { data } = await api.post<{ access_token: string }>("/auth/anonymous");
   return data.access_token;
 };
 
-export const guestLoginGoogle = async (idToken: string): Promise<string> => {
-  const { data } = await guestApi.post<{ access_token: string }>("/guest/auth/google", { id_token: idToken });
+export const loginGoogle = async (idToken: string): Promise<string> => {
+  const { data } = await api.post<{ access_token: string }>("/auth/google", { id_token: idToken });
   return data.access_token;
 };
 
@@ -128,7 +125,7 @@ export interface SavedFace {
 }
 
 export const fetchSavedFaces = async (): Promise<SavedFace[]> => {
-  const { data } = await guestApi.get<SavedFace[]>("/guest/saved-faces");
+  const { data } = await api.get<SavedFace[]>("/guest/saved-faces");
   return data;
 };
 
@@ -136,19 +133,19 @@ export const createSavedFace = async (nickname: string, file: Blob): Promise<Sav
   const form = new FormData();
   form.append("nickname", nickname);
   form.append("file", file, "selfie.jpg");
-  const { data } = await guestApi.post<SavedFace>("/guest/saved-faces", form, {
+  const { data } = await api.post<SavedFace>("/guest/saved-faces", form, {
     headers: { "Content-Type": "multipart/form-data" }
   });
   return data;
 };
 
 export const updateSavedFace = async (id: string, nickname: string): Promise<SavedFace> => {
-  const { data } = await guestApi.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
+  const { data } = await api.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
   return data;
 };
 
 export const deleteSavedFace = async (id: string): Promise<void> => {
-  await guestApi.delete(`/guest/saved-faces/${id}`);
+  await api.delete(`/guest/saved-faces/${id}`);
 };
 
 // ── Guest: History ──────────────────────────────────────────
@@ -170,26 +167,11 @@ export interface SearchHistory {
 }
 
 export const fetchGuestHistory = async (): Promise<SearchHistory[]> => {
-  const { data } = await guestApi.get<SearchHistory[]>("/guest/history");
+  const { data } = await api.get<SearchHistory[]>("/guest/history");
   return data;
 };
 
-// ── Photographer: auth ──────────────────────────────────────
-export const login = async (email: string, password: string): Promise<string> => {
-  const form = new URLSearchParams();
-  form.append("username", email);
-  form.append("password", password);
-  const { data } = await api.post<{ access_token: string }>("/auth/login", form.toString(), {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
-  return data.access_token;
-};
-
-export const signup = async (email: string, password: string): Promise<void> => {
-  await api.post("/auth/signup", { email, password });
-};
-
-// ── Photographer: events CRUD ───────────────────────────────
+// ── Events CRUD ──────────────────────────────────────────────
 export const fetchEvents = async () => {
   const { data } = await api.get("/events/");
   return data;
