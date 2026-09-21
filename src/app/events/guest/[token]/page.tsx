@@ -110,7 +110,7 @@ function EventView({
   const faceId = searchParams.get("face_id") || searchParams.get("saved_face_id");
 
   const eventToken = data.event.qr_token || token;
-  const { status, statusLabel, results, error, needsReferenceFace, uploadPct, runMatch, runReferenceMatch, loadHistoryMatch, reset } =
+  const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } =
     useSelfieMatch(eventToken);
   const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
   const [hasAutoMatched, setHasAutoMatched] = useState(false);
@@ -171,10 +171,8 @@ function EventView({
                   statusLabel={statusLabel}
                   results={results}
                   error={error}
-                  needsReferenceFace={needsReferenceFace}
                   uploadPct={uploadPct}
                   onRunMatch={runMatch}
-                  onFindMe={runReferenceMatch}
                   onReset={reset}
                   savedFaces={savedFaces}
                 />

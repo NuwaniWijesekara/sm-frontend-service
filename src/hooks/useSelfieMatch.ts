@@ -26,18 +26,16 @@ const STATUS_LABELS: Record<MatchStatus, string> = {
 const BUSY: MatchStatus[] = ["validating", "resizing", "uploading", "matching"];
 
 export const useSelfieMatch = (eventId: string) => {
-  const [status,             setStatus]             = useState<MatchStatus>("idle");
-  const [results,            setResults]             = useState<MatchResult[]>([]);
-  const [error,              setError]               = useState<string | null>(null);
-  const [uploadPct,          setUploadPct]           = useState(0);
-  const [needsReferenceFace, setNeedsReferenceFace]  = useState(false);
+  const [status,    setStatus]    = useState<MatchStatus>("idle");
+  const [results,   setResults]   = useState<MatchResult[]>([]);
+  const [error,     setError]     = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState(0);
 
   const runMatch = useCallback(
     async (fileOrId: File | string) => {
       if (BUSY.includes(status)) return; // prevent double-submit
 
       setError(null);
-      setNeedsReferenceFace(false);
       setResults([]);
       setUploadPct(0);
 
@@ -89,35 +87,6 @@ export const useSelfieMatch = (eventId: string) => {
     [eventId, status]
   );
 
-  // Privacy-First AI Face Matching: search using the account's saved
-  // reference face instead of uploading a fresh selfie. Requires the
-  // caller be an owner/collaborator on this event (enforced server-side);
-  // the 400 case below means they haven't saved a reference face yet.
-  const runReferenceMatch = useCallback(async () => {
-    if (BUSY.includes(status)) return;
-
-    setError(null);
-    setNeedsReferenceFace(false);
-    setResults([]);
-    setUploadPct(0);
-    setStatus("matching");
-    try {
-      const matches = await matchSelfie(eventId, undefined, undefined, setUploadPct);
-      setResults(matches);
-      setStatus("done");
-    } catch (err: any) {
-      if (err.response?.status === 400) {
-        setNeedsReferenceFace(true);
-        setError(err.response?.data?.detail || "Please upload a reference face to your profile first.");
-      } else if (err.response?.status === 403) {
-        setError(err.response?.data?.detail || "You don't have access to search this event.");
-      } else {
-        setError(err.response?.data?.detail || "Matching failed. Please try again.");
-      }
-      setStatus("error");
-    }
-  }, [eventId, status]);
-
   const loadHistoryMatch = useCallback(
     async (searchId: string) => {
       setStatus("matching");
@@ -151,7 +120,6 @@ export const useSelfieMatch = (eventId: string) => {
     setStatus("idle");
     setResults([]);
     setError(null);
-    setNeedsReferenceFace(false);
     setUploadPct(0);
   }, []);
 
@@ -160,10 +128,8 @@ export const useSelfieMatch = (eventId: string) => {
     statusLabel: STATUS_LABELS[status],
     results,
     error,
-    needsReferenceFace,
     uploadPct,
     runMatch,
-    runReferenceMatch,
     loadHistoryMatch,
     reset,
   };

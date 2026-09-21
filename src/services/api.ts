@@ -116,28 +116,6 @@ export const loginGoogle = async (idToken: string): Promise<string> => {
   return data.access_token;
 };
 
-// ── Profile: reference face (Privacy-First AI Face Matching) ───
-export interface ReferenceFaceStatus {
-  has_reference_face: boolean;
-  reference_face_url?: string | null;
-}
-
-export const fetchReferenceFace = async (): Promise<ReferenceFaceStatus> => {
-  const { data } = await api.get<ReferenceFaceStatus>("/api/v1/users/me/face");
-  return data;
-};
-
-export const uploadReferenceFace = async (file: File | Blob): Promise<{ message: string; reference_face_url?: string | null }> => {
-  const form = new FormData();
-  form.append("file", file, "reference-face.jpg");
-  const { data } = await api.post<{ message: string; reference_face_url?: string | null }>(
-    "/api/v1/users/me/face",
-    form,
-    { headers: { "Content-Type": "multipart/form-data" } }
-  );
-  return data;
-};
-
 // ── Guest: Saved Faces ──────────────────────────────────────
 export interface SavedFace {
   id: string;

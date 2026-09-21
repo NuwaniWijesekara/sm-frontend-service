@@ -16,8 +16,6 @@ import {
   addCollaborator,
   fetchCollaborators,
   removeCollaborator,
-  fetchReferenceFace,
-  uploadReferenceFace,
   SubscriptionResponse,
   SharedEventData,
   BulkImportResponse,
@@ -80,12 +78,6 @@ export default function DashboardPage() {
   const [collaboratorsListLoading, setCollaboratorsListLoading] = useState(false);
   const [collaboratorsListError, setCollaboratorsListError] = useState("");
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [referenceFaceUrl, setReferenceFaceUrl] = useState<string | null>(null);
-  const [referenceFaceLoading, setReferenceFaceLoading] = useState(false);
-  const [referenceFaceUploading, setReferenceFaceUploading] = useState(false);
-  const [referenceFaceError, setReferenceFaceError] = useState("");
-  const profileFileInputRef = useRef<HTMLInputElement | null>(null);
   const getToken = () => localStorage.getItem("token");
 
   useEffect(() => {
@@ -288,48 +280,6 @@ export default function DashboardPage() {
     }
   };
 
-  const loadReferenceFace = async () => {
-    setReferenceFaceLoading(true);
-    try {
-      const status = await fetchReferenceFace();
-      setReferenceFaceUrl(status.has_reference_face ? status.reference_face_url || null : null);
-    } catch (error: any) {
-      console.warn("Failed to load reference face:", error?.message || error);
-    } finally {
-      setReferenceFaceLoading(false);
-    }
-  };
-
-  const openProfileModal = () => {
-    setIsProfileModalOpen(true);
-    setReferenceFaceError("");
-    loadReferenceFace();
-  };
-
-  const closeProfileModal = () => {
-    if (referenceFaceUploading) return;
-    setIsProfileModalOpen(false);
-    setReferenceFaceError("");
-  };
-
-  const handleReferenceFaceSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-
-    setReferenceFaceUploading(true);
-    setReferenceFaceError("");
-    try {
-      const result = await uploadReferenceFace(file);
-      setReferenceFaceUrl(result.reference_face_url || null);
-    } catch (error: any) {
-      const detail = error?.response?.data?.detail;
-      setReferenceFaceError(detail || "Failed to upload reference face. Please try another photo.");
-    } finally {
-      setReferenceFaceUploading(false);
-    }
-  };
-
   const handleLogout = () => {
     localStorage.removeItem("token");
     router.push("/");
@@ -486,15 +436,6 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={openProfileModal}
-              title="Profile Settings"
-              className="w-10 h-10 flex items-center justify-center text-dim hover:text-accent-dark
-                         bg-surface hover:bg-accent/10 border border-border hover:border-accent/30
-                         rounded-xl transition-colors text-lg"
-            >
-              👤
-            </button>
             <button
               onClick={handleLogout}
               className="px-5 py-2.5 text-sm font-semibold text-dim hover:text-danger
@@ -1160,88 +1101,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {isProfileModalOpen && (
-        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
-          <div className="bg-surface rounded-2xl shadow-xl max-w-md w-full p-6 md:p-8 relative border border-border transform transition-all">
-            <button
-              onClick={closeProfileModal}
-              disabled={referenceFaceUploading}
-              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center
-                         bg-chalk text-dim hover:bg-danger/10 hover:text-danger rounded-full transition-colors disabled:opacity-50"
-            >
-              &times;
-            </button>
-
-            <div className="mb-6 text-center">
-              <span className="inline-block p-3 bg-chalk border border-border rounded-2xl mb-3">
-                <span className="text-2xl">👤</span>
-              </span>
-              <h3 className="font-display text-2xl font-bold text-ink">Profile Settings</h3>
-              <p className="text-sm text-dim mt-1">Manage your account-level reference face</p>
-            </div>
-
-            <div className="bg-chalk border border-border rounded-xl p-4 mb-5">
-              <p className="text-xs text-dim leading-relaxed">
-                Save one reference photo here and use it to instantly search any event you have
-                access to with "Find Me" — no need to upload a fresh selfie every time. EXIF/location
-                data is stripped before it's stored.
-              </p>
-            </div>
-
-            <div className="flex flex-col items-center gap-4 mb-5">
-              <div className="w-32 h-32 rounded-2xl border border-border bg-chalk overflow-hidden flex items-center justify-center">
-                {referenceFaceLoading ? (
-                  <div className="w-6 h-6 border-2 border-border border-t-accent rounded-full animate-spin" />
-                ) : referenceFaceUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={referenceFaceUrl} alt="Your reference face" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-3xl text-dim">?</span>
-                )}
-              </div>
-              <p className="text-xs text-dim font-medium">
-                {referenceFaceLoading ? "Loading..." : referenceFaceUrl ? "Current reference face" : "No reference face saved yet"}
-              </p>
-            </div>
-
-            <input
-              ref={profileFileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="hidden"
-              onChange={handleReferenceFaceSelected}
-            />
-
-            <button
-              type="button"
-              onClick={() => profileFileInputRef.current?.click()}
-              disabled={referenceFaceUploading}
-              className="w-full py-3.5 rounded-xl text-chalk font-semibold text-sm
-                         transition-all bg-ink hover:bg-ink/80 hover:-translate-y-0.5
-                         disabled:opacity-40 disabled:hover:translate-y-0 cursor-pointer disabled:cursor-not-allowed
-                         flex items-center justify-center gap-2"
-            >
-              {referenceFaceUploading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-chalk border-t-transparent rounded-full animate-spin" />
-                  Uploading...
-                </>
-              ) : referenceFaceUrl ? (
-                "Replace Reference Face"
-              ) : (
-                "Upload Reference Face"
-              )}
-            </button>
-
-            {referenceFaceError && (
-              <div className="mt-4 p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-sm font-medium text-center">
-                {referenceFaceError}
               </div>
             )}
           </div>
