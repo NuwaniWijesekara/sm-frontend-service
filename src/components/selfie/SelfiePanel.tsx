@@ -1,5 +1,6 @@
 "use client";
 import React, { useState } from "react";
+import Link from "next/link";
 import { MatchResult } from "@/types";
 import { MatchStatus } from "@/hooks/useSelfieMatch";
 import CameraCapture from "./CameraCapture";
@@ -14,8 +15,10 @@ interface Props {
   statusLabel: string;
   results: MatchResult[];
   error: string | null;
+  needsReferenceFace?: boolean;
   uploadPct: number;
   onRunMatch: (fileOrId: File | string) => void;
+  onFindMe: () => void;
   onReset: () => void;
   savedFaces?: SavedFace[];
 }
@@ -25,8 +28,10 @@ export default function SelfiePanel({
   statusLabel,
   results,
   error,
+  needsReferenceFace = false,
   uploadPct,
   onRunMatch,
+  onFindMe,
   onReset,
   savedFaces = [],
 }: Props) {
@@ -71,6 +76,23 @@ export default function SelfiePanel({
       ) : (
         /* ── Idle / error ── */
         <>
+          {/* Privacy-First: search with the account's saved reference face */}
+          <button
+            onClick={onFindMe}
+            disabled={busy}
+            className="w-full py-3.5 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80
+                       hover:-translate-y-0.5 active:scale-[0.99] transition-all text-sm
+                       flex items-center justify-center gap-2 shadow-sm disabled:opacity-40"
+          >
+            ✨ Find Me (Use Profile Photo)
+          </button>
+
+          <div className="flex items-center gap-3">
+            <hr className="flex-1 border-border" />
+            <span className="text-[10px] text-dim font-bold uppercase tracking-wider">or</span>
+            <hr className="flex-1 border-border" />
+          </div>
+
           {/* Saved Faces Selection */}
           {savedFaces.length > 0 && (
             <div className="space-y-2.5 p-4 bg-chalk/45 border border-border rounded-2xl">
@@ -122,8 +144,16 @@ export default function SelfiePanel({
           <SelfieUploader onSelect={onRunMatch} disabled={busy} />
 
           {error && (
-            <div className="bg-danger/10 border border-danger/30 rounded-xl px-4 py-3">
+            <div className="bg-danger/10 border border-danger/30 rounded-xl px-4 py-3 space-y-2">
               <p className="text-danger text-xs leading-snug">{error}</p>
+              {needsReferenceFace && (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-accent-dark hover:underline"
+                >
+                  Open Profile Settings →
+                </Link>
+              )}
             </div>
           )}
 
