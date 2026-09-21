@@ -708,7 +708,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex-grow" />
                 <button
-                  onClick={() => setSelectedEvent(ev)}
+                  onClick={() => router.push(`/events/guest/${ev.qr_token || ev.id}`)}
                   className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
                              text-ink hover:text-accent-dark border border-border hover:border-accent/30
                              py-3 rounded-xl text-sm font-semibold transition-all duration-300"
