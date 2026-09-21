@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { QRCodeSVG } from "qrcode.react";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,11 @@ import {
   deleteEvent,
   checkUsernameAvailability,
   fetchSubscriptions,
+  fetchSharedEvents,
+  bulkAddCollaborators,
   SubscriptionResponse,
+  SharedEventData,
+  BulkImportResponse,
 } from "@/services/api";
 
 interface EventData {
@@ -23,20 +27,20 @@ interface EventData {
   qr_token?: string;
 }
 
-interface SharedEventData extends EventData {
-  owner_name?: string;
-  permission: "view" | "upload";
-}
-
 type DashboardTab = "my-events" | "shared";
+
+const PERMISSION_LABELS: Record<string, string> = {
+  VIEW_ONLY: "View Only",
+  CAN_UPLOAD: "Can Upload",
+  ADMIN: "Admin",
+};
 
 export default function DashboardPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<DashboardTab>("my-events");
   const [events, setEvents] = useState<EventData[]>([]);
-  // TODO: replace with a real fetchSharedEvents() call once the backend
-  // exposes collaborator-based event access (view/upload permissions).
   const [sharedEvents, setSharedEvents] = useState<SharedEventData[]>([]);
+  const [sharedLoading, setSharedLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<EventData | null>(null);
   const [copied, setCopied] = useState(false);
@@ -55,6 +59,11 @@ export default function DashboardPage() {
   const [deleteError, setDeleteError] = useState("");
   const [activeSubscription, setActiveSubscription] = useState<SubscriptionResponse | null>(null);
   const [subscriptionChecked, setSubscriptionChecked] = useState(false);
+  const [collaboratorsTargetEvent, setCollaboratorsTargetEvent] = useState<EventData | null>(null);
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<BulkImportResponse | null>(null);
+  const [bulkError, setBulkError] = useState("");
+  const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
   const getToken = () => localStorage.getItem("token");
 
   useEffect(() => {
@@ -139,6 +148,17 @@ export default function DashboardPage() {
     }
   };
 
+  const loadSharedEvents = async () => {
+    try {
+      const data = await fetchSharedEvents();
+      setSharedEvents(data);
+    } catch (error: any) {
+      console.warn("Failed to load shared events:", error?.message || error);
+    } finally {
+      setSharedLoading(false);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
@@ -147,10 +167,43 @@ export default function DashboardPage() {
     }
     loadEvents();
     loadSubscription();
+    loadSharedEvents();
     if (isFormModalOpen) return;
     const interval = setInterval(loadEvents, 8000);
     return () => clearInterval(interval);
   }, [router, isFormModalOpen]);
+
+  const openCollaboratorsModal = (event: EventData) => {
+    setCollaboratorsTargetEvent(event);
+    setBulkResult(null);
+    setBulkError("");
+  };
+
+  const closeCollaboratorsModal = () => {
+    if (bulkUploading) return;
+    setCollaboratorsTargetEvent(null);
+    setBulkResult(null);
+    setBulkError("");
+  };
+
+  const handleBulkFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file || !collaboratorsTargetEvent) return;
+
+    setBulkUploading(true);
+    setBulkError("");
+    setBulkResult(null);
+    try {
+      const result = await bulkAddCollaborators(collaboratorsTargetEvent.id, file);
+      setBulkResult(result);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setBulkError(detail || "Failed to import collaborators. Please check the file and try again.");
+    } finally {
+      setBulkUploading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("token");
@@ -390,6 +443,14 @@ export default function DashboardPage() {
                 >
                   <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                     <button
+                      onClick={() => openCollaboratorsModal(ev)}
+                      className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
+                                 rounded-lg text-dim hover:text-accent-dark transition-colors"
+                      title="Manage Collaborators"
+                    >
+                      👥
+                    </button>
+                    <button
                       onClick={() => openEditModal(ev)}
                       className="w-8 h-8 flex items-center justify-center bg-chalk border border-border
                                  rounded-lg text-dim hover:text-accent-dark transition-colors"
@@ -407,7 +468,7 @@ export default function DashboardPage() {
                     </button>
                   </div>
 
-                  <div className="relative z-10 pr-12">
+                  <div className="relative z-10 pr-20">
                     <h2 className="font-display text-xl font-bold text-ink mb-1 truncate" title={ev.name}>
                       {ev.name}
                     </h2>
@@ -470,6 +531,11 @@ export default function DashboardPage() {
               ))}
             </div>
           )
+        ) : sharedLoading ? (
+          <div className="flex flex-col items-center justify-center h-64 space-y-4">
+            <div className="w-10 h-10 border-4 border-border border-t-accent rounded-full animate-spin" />
+            <p className="text-dim font-medium animate-pulse-soft">Loading shared events...</p>
+          </div>
         ) : sharedEvents.length === 0 ? (
           <div className="bg-surface border border-border rounded-2xl p-12 text-center">
             <div className="w-20 h-20 bg-chalk border border-border rounded-full flex items-center justify-center mx-auto mb-6">
@@ -477,7 +543,7 @@ export default function DashboardPage() {
             </div>
             <h2 className="font-display text-2xl font-bold text-ink mb-2">Nothing Shared Yet</h2>
             <p className="text-dim max-w-md mx-auto">
-              Events that other users add you to as a collaborator (with View or Upload access) will show up here.
+              Events that other users add you to as a collaborator (with View, Upload, or Admin access) will show up here.
             </p>
           </div>
         ) : (
@@ -491,18 +557,18 @@ export default function DashboardPage() {
                   <h2 className="font-display text-xl font-bold text-ink mb-1 truncate" title={ev.name}>
                     {ev.name}
                   </h2>
-                  <div className="flex items-center gap-2 mb-5">
+                  <div className="flex items-center gap-2 mb-5 flex-wrap">
                     {ev.owner_name && (
                       <span className="text-xs text-dim">by {ev.owner_name}</span>
                     )}
                     <span
                       className={`text-xs font-bold px-2 py-0.5 rounded-md border ${
-                        ev.permission === "upload"
-                          ? "text-accent-dark bg-accent/10 border-accent/20"
-                          : "text-dim bg-chalk border-border"
+                        ev.permission === "VIEW_ONLY"
+                          ? "text-dim bg-chalk border-border"
+                          : "text-accent-dark bg-accent/10 border-accent/20"
                       }`}
                     >
-                      {ev.permission === "upload" ? "Upload Access" : "View Access"}
+                      {PERMISSION_LABELS[ev.permission] || ev.permission}
                     </span>
                   </div>
                 </div>
@@ -757,6 +823,104 @@ export default function DashboardPage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {collaboratorsTargetEvent && (
+        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
+          <div className="bg-surface rounded-2xl shadow-xl max-w-lg w-full p-6 md:p-8 relative border border-border transform transition-all">
+            <button
+              onClick={closeCollaboratorsModal}
+              disabled={bulkUploading}
+              className="absolute top-5 right-5 w-8 h-8 flex items-center justify-center
+                         bg-chalk text-dim hover:bg-danger/10 hover:text-danger rounded-full transition-colors disabled:opacity-50"
+            >
+              &times;
+            </button>
+
+            <div className="mb-6">
+              <span className="inline-block p-3 bg-chalk border border-border rounded-2xl mb-3">
+                <span className="text-2xl">👥</span>
+              </span>
+              <h3 className="font-display text-2xl font-bold text-ink">Manage Collaborators</h3>
+              <p className="text-sm text-dim mt-1 truncate">{collaboratorsTargetEvent.name}</p>
+            </div>
+
+            <div className="bg-chalk border border-border rounded-xl p-4 mb-5">
+              <p className="text-xs text-dim leading-relaxed">
+                Upload a CSV with an <span className="font-mono font-bold text-ink">email</span> column
+                (required) and an optional <span className="font-mono font-bold text-ink">permission</span> column
+                (<span className="font-mono">VIEW_ONLY</span>, <span className="font-mono">CAN_UPLOAD</span>, or{" "}
+                <span className="font-mono">ADMIN</span> — defaults to View Only). Emails that don't have an
+                account yet will get one waiting for them.
+              </p>
+            </div>
+
+            <input
+              ref={bulkFileInputRef}
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleBulkFileSelected}
+            />
+
+            <button
+              type="button"
+              onClick={() => bulkFileInputRef.current?.click()}
+              disabled={bulkUploading}
+              className="w-full py-3.5 rounded-xl text-chalk font-semibold text-sm
+                         transition-all bg-ink hover:bg-ink/80 hover:-translate-y-0.5
+                         disabled:opacity-40 disabled:hover:translate-y-0 cursor-pointer disabled:cursor-not-allowed
+                         flex items-center justify-center gap-2"
+            >
+              {bulkUploading ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-chalk border-t-transparent rounded-full animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>📄 Bulk Add Collaborators (CSV)</>
+              )}
+            </button>
+
+            {bulkError && (
+              <div className="mt-4 p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-sm font-medium text-center">
+                {bulkError}
+              </div>
+            )}
+
+            {bulkResult && (
+              <div className="mt-5">
+                <div className="p-3.5 bg-success/10 border border-success/20 rounded-xl text-sm font-semibold text-success text-center mb-3">
+                  {bulkResult.added} added, {bulkResult.skipped} skipped out of {bulkResult.total_rows} row
+                  {bulkResult.total_rows === 1 ? "" : "s"}.
+                </div>
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                  {bulkResult.results.map((r, i) => (
+                    <div
+                      key={`${r.email}-${i}`}
+                      className="flex items-center justify-between gap-3 px-3 py-2 bg-chalk border border-border rounded-lg text-xs"
+                    >
+                      <span className="text-ink font-medium truncate">{r.email}</span>
+                      <span
+                        className={`shrink-0 font-bold px-2 py-0.5 rounded-md ${
+                          r.status === "added"
+                            ? "text-success bg-success/10"
+                            : r.status === "already_collaborator"
+                            ? "text-accent-dark bg-accent/10"
+                            : "text-dim bg-surface border border-border"
+                        }`}
+                      >
+                        {r.status === "added"
+                          ? PERMISSION_LABELS[r.permission || "VIEW_ONLY"]
+                          : r.status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

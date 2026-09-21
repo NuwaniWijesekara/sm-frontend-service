@@ -198,6 +198,51 @@ export const deleteEvent = async (id: string) => {
   await api.delete(`/events/${id}`);
 };
 
+// ── Collaborators ────────────────────────────────────────────
+export type CollaboratorPermission = "VIEW_ONLY" | "CAN_UPLOAD" | "ADMIN";
+
+export interface SharedEventData {
+  id: string;
+  name: string;
+  drive_url: string;
+  status: string;
+  username?: string;
+  qr_token?: string;
+  owner_name?: string;
+  owner_email?: string;
+  permission: CollaboratorPermission;
+}
+
+export const fetchSharedEvents = async (): Promise<SharedEventData[]> => {
+  const { data } = await api.get<SharedEventData[]>("/api/v1/events/shared");
+  return data;
+};
+
+export interface BulkCollaboratorResult {
+  email: string;
+  status: "added" | "already_collaborator" | "is_owner" | "invalid_email" | "error";
+  permission?: CollaboratorPermission;
+  detail?: string;
+}
+
+export interface BulkImportResponse {
+  total_rows: number;
+  added: number;
+  skipped: number;
+  results: BulkCollaboratorResult[];
+}
+
+export const bulkAddCollaborators = async (eventId: string, file: File): Promise<BulkImportResponse> => {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<BulkImportResponse>(
+    `/api/v1/events/${eventId}/collaborators/bulk`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data;
+};
+
 // ── Subscriptions ───────────────────────────────────────────
 // user_id is intentionally not part of this payload: the backend derives the
 // subscriber's identity from the caller's JWT (see `api` client above), never
