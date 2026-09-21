@@ -283,6 +283,22 @@ export const addCollaborator = async (
   return data;
 };
 
+export interface Collaborator {
+  user_id: string;
+  email?: string | null;
+  name?: string | null;
+  permission: CollaboratorPermission;
+}
+
+export const fetchCollaborators = async (eventId: string): Promise<Collaborator[]> => {
+  const { data } = await api.get<Collaborator[]>(`/api/v1/events/${eventId}/collaborators`);
+  return data;
+};
+
+export const removeCollaborator = async (eventId: string, userId: string): Promise<void> => {
+  await api.delete(`/api/v1/events/${eventId}/collaborators/${userId}`);
+};
+
 // ── Subscriptions ───────────────────────────────────────────
 // user_id is intentionally not part of this payload: the backend derives the
 // subscriber's identity from the caller's JWT (see `api` client above), never

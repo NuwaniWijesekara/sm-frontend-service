@@ -14,12 +14,15 @@ import {
   fetchSharedEvents,
   bulkAddCollaborators,
   addCollaborator,
+  fetchCollaborators,
+  removeCollaborator,
   fetchReferenceFace,
   uploadReferenceFace,
   SubscriptionResponse,
   SharedEventData,
   BulkImportResponse,
   CollaboratorPermission,
+  Collaborator,
 } from "@/services/api";
 
 interface EventData {
@@ -73,6 +76,10 @@ export default function DashboardPage() {
   const [manualAdding, setManualAdding] = useState(false);
   const [manualError, setManualError] = useState("");
   const [manualSuccess, setManualSuccess] = useState("");
+  const [collaboratorsList, setCollaboratorsList] = useState<Collaborator[]>([]);
+  const [collaboratorsListLoading, setCollaboratorsListLoading] = useState(false);
+  const [collaboratorsListError, setCollaboratorsListError] = useState("");
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [referenceFaceUrl, setReferenceFaceUrl] = useState<string | null>(null);
   const [referenceFaceLoading, setReferenceFaceLoading] = useState(false);
@@ -188,6 +195,20 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [router, isFormModalOpen]);
 
+  const loadCollaboratorsList = async (eventId: string) => {
+    setCollaboratorsListLoading(true);
+    setCollaboratorsListError("");
+    try {
+      const list = await fetchCollaborators(eventId);
+      setCollaboratorsList(list);
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setCollaboratorsListError(typeof detail === "string" ? detail : "Failed to load collaborators.");
+    } finally {
+      setCollaboratorsListLoading(false);
+    }
+  };
+
   const openCollaboratorsModal = (event: EventData) => {
     setCollaboratorsTargetEvent(event);
     setBulkResult(null);
@@ -196,6 +217,9 @@ export default function DashboardPage() {
     setManualPermission("VIEW_ONLY");
     setManualError("");
     setManualSuccess("");
+    setCollaboratorsList([]);
+    setCollaboratorsListError("");
+    loadCollaboratorsList(event.id);
   };
 
   const closeCollaboratorsModal = () => {
@@ -218,6 +242,7 @@ export default function DashboardPage() {
       const result = await addCollaborator(collaboratorsTargetEvent.id, manualEmail.trim(), manualPermission);
       setManualSuccess(`${result.email} added as ${PERMISSION_LABELS[result.permission] || result.permission}.`);
       setManualEmail("");
+      loadCollaboratorsList(collaboratorsTargetEvent.id);
     } catch (error: any) {
       const detail = error?.response?.data?.detail;
       setManualError(
@@ -225,6 +250,21 @@ export default function DashboardPage() {
       );
     } finally {
       setManualAdding(false);
+    }
+  };
+
+  const handleRemoveCollaborator = async (targetUserId: string) => {
+    if (!collaboratorsTargetEvent) return;
+    setRemovingUserId(targetUserId);
+    setCollaboratorsListError("");
+    try {
+      await removeCollaborator(collaboratorsTargetEvent.id, targetUserId);
+      setCollaboratorsList((prev) => prev.filter((c) => c.user_id !== targetUserId));
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail;
+      setCollaboratorsListError(typeof detail === "string" ? detail : "Failed to remove collaborator.");
+    } finally {
+      setRemovingUserId(null);
     }
   };
 
@@ -239,6 +279,7 @@ export default function DashboardPage() {
     try {
       const result = await bulkAddCollaborators(collaboratorsTargetEvent.id, file);
       setBulkResult(result);
+      loadCollaboratorsList(collaboratorsTargetEvent.id);
     } catch (error: any) {
       const detail = error?.response?.data?.detail;
       setBulkError(detail || "Failed to import collaborators. Please check the file and try again.");
@@ -1065,6 +1106,60 @@ export default function DashboardPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mt-6 mb-4">
+              <hr className="flex-1 border-border" />
+              <span className="text-[10px] text-dim font-bold uppercase tracking-wider">Current Collaborators</span>
+              <hr className="flex-1 border-border" />
+            </div>
+
+            {collaboratorsListError && (
+              <div className="mb-3 p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-xs font-medium text-center">
+                {collaboratorsListError}
+              </div>
+            )}
+
+            {collaboratorsListLoading ? (
+              <div className="flex justify-center py-6">
+                <div className="w-6 h-6 border-2 border-border border-t-accent rounded-full animate-spin" />
+              </div>
+            ) : collaboratorsList.length === 0 ? (
+              <p className="text-xs text-dim text-center py-4">No collaborators yet.</p>
+            ) : (
+              <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                {collaboratorsList.map((c) => (
+                  <div
+                    key={c.user_id}
+                    className="flex items-center justify-between gap-3 px-3 py-2.5 bg-chalk border border-border rounded-lg"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-ink truncate">{c.name || c.email || c.user_id}</p>
+                      {c.name && c.email && (
+                        <p className="text-[11px] text-dim truncate">{c.email}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-accent-dark bg-accent/10 border border-accent/20">
+                        {PERMISSION_LABELS[c.permission] || c.permission}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveCollaborator(c.user_id)}
+                        disabled={removingUserId === c.user_id}
+                        title="Remove collaborator"
+                        className="w-7 h-7 flex items-center justify-center text-dim hover:text-danger
+                                   hover:bg-danger/10 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {removingUserId === c.user_id ? (
+                          <span className="w-3.5 h-3.5 border-2 border-dim border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          "🗑️"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
