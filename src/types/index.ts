@@ -48,13 +48,15 @@ export interface Event {
 
 export interface Photo {
   id: string;
-  s3_url: string;
+  // Display version (watermarked for watermarked events); the guest API
+  // falls back to the original when no display copy exists.
+  display_url: string;
   thumbnail_url: string;
 }
 
 export interface MatchResult {
   photo_id: string;
-  s3_url: string;
+  display_url: string;
   thumbnail_url: string;
   similarity_score: number;
 }

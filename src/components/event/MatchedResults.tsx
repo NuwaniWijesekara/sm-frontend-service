@@ -59,7 +59,7 @@ export default function MatchedResults({ results, onReset }: Props) {
               className="w-full h-full object-cover"
             />
             <a
-              href={r.s3_url}
+              href={r.display_url}
               download
               target="_blank"
               rel="noreferrer"

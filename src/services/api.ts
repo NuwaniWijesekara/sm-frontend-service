@@ -161,7 +161,7 @@ export interface SearchHistory {
   };
   photos: {
     id: string;
-    s3_url: string;
+    display_url: string;
     thumbnail_url?: string;
   }[];
 }
@@ -375,4 +375,4 @@ export const fetchPackages = async (appId?: string): Promise<AdminPackage[]> => 
   });
   return data;
 };
-
+

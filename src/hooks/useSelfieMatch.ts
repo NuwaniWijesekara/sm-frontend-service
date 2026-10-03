@@ -98,8 +98,8 @@ export const useSelfieMatch = (eventId: string) => {
         if (matchRecord && matchRecord.photos) {
           const matches: MatchResult[] = matchRecord.photos.map((p) => ({
             photo_id: p.id,
-            s3_url: p.s3_url,
-            thumbnail_url: p.thumbnail_url || p.s3_url,
+            display_url: p.display_url,
+            thumbnail_url: p.thumbnail_url || p.display_url,
             similarity_score: 100,
           }));
           setResults(matches);
