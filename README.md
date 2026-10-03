@@ -15,7 +15,7 @@ Next.js 14 application serving both the photographer studio dashboard and the gu
 |---|---|
 | `/` | Landing page |
 | `/auth` | Login and signup for photographers |
-| `/photographer-dashboard` | Create/edit/delete events, view status, generate QR codes |
+| `/dashboard` | Unified dashboard — create/edit/delete your events, view status, generate QR codes, and see events shared with you |
 
 ### Guest side (public)
 
@@ -35,8 +35,8 @@ frontend/
 │   │   ├── page.tsx                      # Landing page
 │   │   ├── auth/
 │   │   │   └── page.tsx                  # Login / signup
-│   │   ├── photographer-dashboard/
-│   │   │   └── page.tsx                  # Event management dashboard
+│   │   ├── dashboard/
+│   │   │   └── page.tsx                  # Unified event dashboard (My Events / Shared with Me)
 │   │   └── events/guest/[token]/
 │   │       └── page.tsx                  # Guest event page
 │   ├── components/

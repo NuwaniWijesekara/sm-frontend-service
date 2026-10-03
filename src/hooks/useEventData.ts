@@ -8,14 +8,16 @@ export type LoadStatus =
   | "ready"
   | "invalid_token"
   | "not_ready"
-  | "network_error";
+  | "network_error"
+  | "login_required"
+  | "verification_required"
+  | "not_invited";
 
 export const useEventData = (token: string) => {
   const [data,   setData]   = useState<EventPageData | null>(null);
   const [status, setStatus] = useState<LoadStatus>("loading");
 
   useEffect(() => {
-    console.log("token in hook: ", token);
     if (!token) {
       setStatus("invalid_token");
       return;
@@ -38,6 +40,9 @@ export const useEventData = (token: string) => {
         switch (err.reason) {
           case "invalid_token": setStatus("invalid_token"); break;
           case "not_ready":     setStatus("not_ready");     break;
+          case "login_required":
+          case "verification_required":
+          case "not_invited":   setStatus(err.reason);      break;
           default:              setStatus("network_error"); break;
         }
       });

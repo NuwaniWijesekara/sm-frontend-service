@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback } from "react";
 import { validateImageFile, resizeToBlob } from "@/utils/imageUtils";
-import { matchSelfie } from "@/services/api";
+import { matchSelfie, fetchGuestHistory } from "@/services/api";
 import { MatchResult } from "@/types";
 
 export type MatchStatus =
@@ -25,6 +25,15 @@ const STATUS_LABELS: Record<MatchStatus, string> = {
 
 const BUSY: MatchStatus[] = ["validating", "resizing", "uploading", "matching"];
 
+// API errors carry `detail` as a string, or as {code, message} for
+// access-control denials (sm-guest-service utils/access.py).
+const errorMessage = (err: any, fallback: string): string => {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail.message === "string") return detail.message;
+  return fallback;
+};
+
 export const useSelfieMatch = (eventId: string) => {
   const [status,    setStatus]    = useState<MatchStatus>("idle");
   const [results,   setResults]   = useState<MatchResult[]>([]);
@@ -46,7 +55,7 @@ export const useSelfieMatch = (eventId: string) => {
           setResults(matches);
           setStatus("done");
         } catch (err: any) {
-          setError(err.response?.data?.detail || "Matching failed. Please try again.");
+          setError(errorMessage(err, "Matching failed. Please try again."));
           setStatus("error");
         }
       } else {
@@ -77,14 +86,43 @@ export const useSelfieMatch = (eventId: string) => {
           const matches = await matchSelfie(eventId, blob, undefined, setUploadPct);
           setResults(matches);
           setStatus("done");
-        } catch {
-          setError("Matching failed. Try a well-lit, clear selfie facing the camera.");
+        } catch (err: any) {
+          setError(errorMessage(err, "Matching failed. Try a well-lit, clear selfie facing the camera."));
           setStatus("error");
         }
       }
       // blob falls out of scope here → GC collects it. Nothing persisted.
     },
     [eventId, status]
+  );
+
+  const loadHistoryMatch = useCallback(
+    async (searchId: string) => {
+      setStatus("matching");
+      setError(null);
+      setResults([]);
+      try {
+        const history = await fetchGuestHistory();
+        const matchRecord = history.find((h) => h.id === searchId);
+        if (matchRecord && matchRecord.photos) {
+          const matches: MatchResult[] = matchRecord.photos.map((p) => ({
+            photo_id: p.id,
+            display_url: p.display_url,
+            thumbnail_url: p.thumbnail_url || p.display_url,
+            similarity_score: 100,
+          }));
+          setResults(matches);
+          setStatus("done");
+        } else {
+          setStatus("idle");
+        }
+      } catch (err: any) {
+        console.error("Failed to load search history:", err);
+        setError("Could not load previous search results.");
+        setStatus("error");
+      }
+    },
+    []
   );
 
   const reset = useCallback(() => {
@@ -101,6 +139,7 @@ export const useSelfieMatch = (eventId: string) => {
     error,
     uploadPct,
     runMatch,
+    loadHistoryMatch,
     reset,
   };
 };

@@ -31,6 +31,7 @@ export default function PhotoCard({ photo, highlighted }: Props) {
         src={photo.thumbnail_url}
         alt="Event photo"
         loading="lazy"
+        referrerPolicy="no-referrer"
         onLoad={() => setLoaded(true)}
         className={[
           "w-full object-cover transition-opacity duration-300",
@@ -43,7 +44,7 @@ export default function PhotoCard({ photo, highlighted }: Props) {
                    transition-opacity duration-200 flex items-end p-3"
       >
         <a
-          href={photo.s3_url}
+          href={photo.display_url}
           download
           target="_blank"
           rel="noreferrer"

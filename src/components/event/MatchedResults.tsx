@@ -55,10 +55,11 @@ export default function MatchedResults({ results, onReset }: Props) {
             <img
               src={r.thumbnail_url}
               alt="Matched photo"
+              referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
             <a
-              href={r.s3_url}
+              href={r.display_url}
               download
               target="_blank"
               rel="noreferrer"
@@ -73,7 +74,7 @@ export default function MatchedResults({ results, onReset }: Props) {
               className="absolute bottom-1 left-1 bg-accent text-ink text-[9px]
                          font-bold px-1.5 py-0.5 rounded-full pointer-events-none"
             >
-              {Math.round(r.similarity_score * 100)}%
+              {Math.round(r.similarity_score > 1 ? r.similarity_score : r.similarity_score * 100)}%
             </div>
           </div>
         ))}

@@ -1,15 +1,17 @@
 "use client";
-import React, { use, useState, useEffect } from "react";
+import React, { use, useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useEventData } from "@/hooks/useEventData";
 import { useSelfieMatch } from "@/hooks/useSelfieMatch";
 import EventHeader from "@/components/event/EventHeader";
 import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
-import PhotoGallery from "@/components/event/PhotoGallary";
-import { fetchSavedFaces, guestLogin, guestRegister, guestLoginAnonymous, guestLoginGoogle, SavedFace } from "@/services/api";
-import { Camera, Lock, User, Sparkles, ArrowRight, UserPlus, AlertCircle, CheckCircle2 } from "lucide-react";
+import PhotoGallery from "@/components/event/PhotoGallery";
+import { loginAnonymous } from "@/services/api";
+import { useRecentSearches } from "@/hooks/useRecentSearches";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { Camera, Sparkles, ArrowRight, ArrowLeft, AlertCircle, Lock } from "lucide-react";
 import Link from "next/link";
-import Script from "next/script";
 
 interface Props {
   params: Promise<{ token: string }>;
@@ -18,23 +20,23 @@ interface Props {
 export default function EventPage({ params }: Props) {
   const { token } = use(params);
   const { data, status } = useEventData(token);
-  const [guestToken, setGuestToken] = useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const t = localStorage.getItem("guest_token");
+      const t = localStorage.getItem("token");
       if (!t) {
         setShowAuthModal(true);
       } else {
-        setGuestToken(t);
+        setAuthToken(t);
       }
     }
   }, []);
 
   const handleAuthSuccess = (t: string) => {
-    localStorage.setItem("guest_token", t);
-    setGuestToken(t);
+    localStorage.setItem("token", t);
+    setAuthToken(t);
     setShowAuthModal(false);
   };
 
@@ -57,6 +59,10 @@ export default function EventPage({ params }: Props) {
         body="This link is invalid or has expired. Contact your event photographer for a new link."
       />
     );
+  }
+
+  if (status === "login_required" || status === "verification_required" || status === "not_invited") {
+    return <InviteOnlyGate reason={status} />;
   }
 
   if (status === "not_ready") {
@@ -83,9 +89,15 @@ export default function EventPage({ params }: Props) {
   return (
     <>
       {showAuthModal && (
-        <GuestAuthOverlay onAuthSuccess={handleAuthSuccess} />
+        <AuthGate token={token} onAuthSuccess={handleAuthSuccess} />
       )}
-      <EventView token={token} data={data} guestToken={guestToken} />
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-chalk">
+          <Spinner size="lg" />
+        </div>
+      }>
+        <EventView token={token} data={data} authToken={authToken} />
+      </Suspense>
     </>
   );
 }
@@ -93,36 +105,45 @@ export default function EventPage({ params }: Props) {
 function EventView({
   token,
   data,
-  guestToken,
+  authToken,
 }: {
   token: string;
   data: NonNullable<ReturnType<typeof useEventData>["data"]>;
-  guestToken: string | null;
+  authToken: string | null;
 }) {
-  const { status, statusLabel, results, error, uploadPct, runMatch, reset } =
-    useSelfieMatch(data.event.id);
-  const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
+  const searchParams = useSearchParams();
+  const searchId = searchParams.get("search_id");
+
+  const eventToken = data.event.qr_token || token;
+  const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } =
+    useSelfieMatch(eventToken);
+  const [hasAutoMatched, setHasAutoMatched] = useState(false);
+  // Signed-in (incl. anonymous) users see their earlier searches on this
+  // event; refreshed after each search, which adds a history entry.
+  const recentSearches = useRecentSearches(authToken ? data.event.id : null, `${authToken}:${status === "done"}`);
 
   useEffect(() => {
-    if (guestToken) {
-      try {
-        const parts = guestToken.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-          if (!payload.is_anonymous) {
-            fetchSavedFaces().then(setSavedFaces).catch(console.error);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to decode token/fetch saved faces", e);
-      }
+    if (hasAutoMatched) return;
+
+    if (searchId) {
+      setHasAutoMatched(true);
+      loadHistoryMatch(searchId);
     }
-  }, [guestToken]);
+  }, [searchId, loadHistoryMatch, hasAutoMatched]);
 
   return (
     <main className="min-h-screen bg-chalk">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-10 flex flex-col justify-between min-h-screen">
         <div>
+          <div className="mb-6">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-xs font-bold text-dim hover:text-accent-dark transition-colors bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 px-3.5 py-2 rounded-xl shadow-xs"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+            </Link>
+          </div>
+
           <EventHeader event={data.event} />
 
           <div className="mt-8 flex flex-col lg:flex-row gap-8">
@@ -133,7 +154,7 @@ function EventView({
             <aside className="w-full lg:w-80 xl:w-96 shrink-0">
               <div className="lg:sticky lg:top-6">
                 <SelfiePanel
-                  eventId={data.event.id}
+                  eventId={eventToken}
                   status={status}
                   statusLabel={statusLabel}
                   results={results}
@@ -141,7 +162,8 @@ function EventView({
                   uploadPct={uploadPct}
                   onRunMatch={runMatch}
                   onReset={reset}
-                  savedFaces={savedFaces}
+                  recentSearches={recentSearches}
+                  onOpenSearch={loadHistoryMatch}
                 />
               </div>
             </aside>
@@ -151,8 +173,8 @@ function EventView({
         <footer className="mt-16 pb-8 text-center text-[11px] text-dim flex justify-between border-t border-border pt-4">
           <span>Powered by ScanMe AI</span>
           <div className="flex gap-4">
-            <Link href="/guest-dashboard" className="hover:underline font-bold text-accent">
-              Go to Guest Dashboard
+            <Link href="/dashboard" className="hover:underline font-bold text-accent">
+              Go to Dashboard
             </Link>
             <span>·</span>
             <span>Processed securely in memory</span>
@@ -163,129 +185,22 @@ function EventView({
   );
 }
 
-function GuestAuthOverlay({ onAuthSuccess }: { onAuthSuccess: (token: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"anonymous" | "login" | "register">("anonymous");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function AuthGate({ token, onAuthSuccess }: { token: string; onAuthSuccess: (token: string) => void }) {
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; password?: string }>({});
 
-  const validateForm = (isRegister: boolean) => {
-    const errs: typeof fieldErrors = {};
-    if (isRegister && !name.trim()) {
-      errs.name = "Full Name is required";
-    }
-    if (!email) {
-      errs.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errs.email = "Please enter a valid email address";
-    }
-    if (!password) {
-      errs.password = "Password is required";
-    } else if (password.length < 8) {
-      errs.password = "Password must be at least 8 characters long";
-    }
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
-  };
-
-  const handleGuestLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleContinueAsGuest = async () => {
     setError("");
-    setSuccess("");
-    if (!validateForm(false)) return;
     setLoading(true);
     try {
-      const token = await guestLogin(email, password);
-      setSuccess("Successfully logged in!");
-      setTimeout(() => onAuthSuccess(token), 500);
+      const newToken = await loginAnonymous();
+      onAuthSuccess(newToken);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Invalid email or password");
+      setError("Failed to start a temporary session. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  const handleGuestRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-    if (!validateForm(true)) return;
-    setLoading(true);
-    try {
-      await guestRegister(name, email, password);
-      setSuccess("Account created successfully! You can now log in.");
-      setActiveTab("login");
-      setError("");
-      setName("");
-      setEmail("");
-      setPassword("");
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Registration failed. Try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAnonymousGuest = async () => {
-    setError("");
-    setSuccess("");
-    setLoading(true);
-    try {
-      const token = await guestLoginAnonymous();
-      onAuthSuccess(token);
-    } catch (err: any) {
-      setError("Failed to create temporary session. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleCredentialResponse = async (response: any) => {
-    console.log("Google response received in overlay:", response);
-    setError("");
-    setSuccess("");
-    setLoading(true);
-    try {
-      if (!response.credential) {
-        throw new Error("No credential returned from Google login.");
-      }
-      const token = await guestLoginGoogle(response.credential);
-      setSuccess("Successfully logged in with Google!");
-      setTimeout(() => onAuthSuccess(token), 500);
-    } catch (err: any) {
-      console.error("Google overlay login error:", err);
-      const apiError = err.response?.data?.detail;
-      setError(apiError || "Google authentication failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const initGoogle = () => {
-    if (typeof window !== "undefined" && (window as any).google) {
-      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-      console.log("Initializing Google OAuth in overlay with client_id:", clientId);
-      (window as any).google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredentialResponse,
-      });
-      const btnContainer = document.getElementById("google-overlay-btn");
-      if (btnContainer) {
-        (window as any).google.accounts.id.renderButton(
-          btnContainer,
-          { theme: "outline", size: "large", width: 350, shape: "rectangular" }
-        );
-      }
-    }
-  };
-
-  useEffect(() => {
-    initGoogle();
-  }, [activeTab]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
@@ -294,33 +209,8 @@ function GuestAuthOverlay({ onAuthSuccess }: { onAuthSuccess: (token: string) =>
           <div className="mx-auto w-10 h-10 bg-ink rounded-xl flex items-center justify-center shadow-sm">
             <Camera className="w-5 h-5 text-chalk" />
           </div>
-          <h2 className="text-xl font-extrabold tracking-tight mt-3 text-ink font-display">Guest Authentication</h2>
-          <p className="text-xs text-dim">Unlock event search features to scan photos.</p>
-        </div>
-
-        {/* Tab selector */}
-        <div className="flex bg-chalk p-1 rounded-xl border border-border text-xs">
-          <button
-            type="button"
-            onClick={() => { setActiveTab("anonymous"); setError(""); setSuccess(""); setFieldErrors({}); }}
-            className={`flex-1 text-center py-2 rounded-lg font-bold transition ${activeTab === "anonymous" ? "bg-surface text-ink shadow-sm" : "text-dim hover:text-ink"}`}
-          >
-            Continue as Guest
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab("login"); setError(""); setSuccess(""); setFieldErrors({}); }}
-            className={`flex-1 text-center py-2 rounded-lg font-bold transition ${activeTab === "login" ? "bg-surface text-ink shadow-sm" : "text-dim hover:text-ink"}`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab("register"); setError(""); setSuccess(""); setFieldErrors({}); }}
-            className={`flex-1 text-center py-2 rounded-lg font-bold transition ${activeTab === "register" ? "bg-surface text-ink shadow-sm" : "text-dim hover:text-ink"}`}
-          >
-            Register
-          </button>
+          <h2 className="text-xl font-extrabold tracking-tight mt-3 text-ink font-display">Welcome</h2>
+          <p className="text-xs text-dim">Continue as a guest to search this event's photos, or sign in with Google to keep your searches.</p>
         </div>
 
         {error && (
@@ -329,194 +219,79 @@ function GuestAuthOverlay({ onAuthSuccess }: { onAuthSuccess: (token: string) =>
             <span className="font-semibold">{error}</span>
           </div>
         )}
-        {success && (
-          <div className="p-3.5 bg-success/10 border border-success/20 text-success rounded-xl text-xs flex gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span className="font-semibold">{success}</span>
+
+        <div className="space-y-4 text-center">
+          <p className="text-xs text-dim leading-relaxed max-w-sm mx-auto">
+            Continuing as a guest is instant — your search history and uploads are temporary and automatically deleted in 24 hours.
+          </p>
+          <button
+            onClick={handleContinueAsGuest}
+            disabled={loading}
+            className="w-full py-3 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-xs flex items-center justify-center gap-2 shadow-sm disabled:opacity-40"
+          >
+            {loading ? "Starting session..." : "Continue as Guest"} <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-dim">Or</span>
+            <div className="flex-1 h-px bg-border" />
           </div>
-        )}
+          <GoogleSignInButton
+            onSuccess={onAuthSuccess}
+            onError={setError}
+            onLoadingChange={setLoading}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-        {activeTab === "anonymous" ? (
-          <div className="space-y-4 text-center">
-            <p className="text-xs text-dim leading-relaxed max-w-sm mx-auto">
-              Continue anonymously to search photos. Your search history and uploads are temporary and automatically deleted in 24 hours.
-            </p>
-            <button
-              onClick={handleAnonymousGuest}
-              disabled={loading}
-              className="w-full py-3 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-xs flex items-center justify-center gap-2 shadow-sm"
-            >
-              {loading ? "Starting session..." : "Continue as Guest"} <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        ) : activeTab === "login" ? (
-          <form onSubmit={handleGuestLogin} className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-ink tracking-wider mb-1.5 ml-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <User className="absolute left-4 top-2.5 w-4 h-4 text-dim" />
-                <input
-                  type="email"
-                  required
-                  placeholder="guest@mail.com"
-                  className={`w-full pl-12 pr-4 py-2.5 bg-chalk border ${fieldErrors.email ? "border-danger focus:ring-danger" : "border-border focus:ring-accent"} rounded-xl outline-none text-xs transition text-ink font-semibold placeholder:text-dim`}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
-                  }}
-                />
-              </div>
-              {fieldErrors.email && (
-                <p className="text-danger text-[10px] mt-1 ml-1 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {fieldErrors.email}
-                </p>
-              )}
-            </div>
+// Invite-only gallery sign-in. Google is the only option offered here:
+// access needs a verified email (sm-guest-service utils/access.py), and only a
+// Google sign-in provides one — email/password lives on the dashboard login.
+function InviteOnlyGate({ reason }: { reason: "login_required" | "verification_required" | "not_invited" }) {
+  const [error, setError] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-ink tracking-wider mb-1.5 ml-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-2.5 w-4 h-4 text-dim" />
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••"
-                  className={`w-full pl-12 pr-4 py-2.5 bg-chalk border ${fieldErrors.password ? "border-danger focus:ring-danger" : "border-border focus:ring-accent"} rounded-xl outline-none text-xs transition text-ink font-semibold placeholder:text-dim`}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: undefined });
-                  }}
-                />
-              </div>
-              {fieldErrors.password && (
-                <p className="text-danger text-[10px] mt-1 ml-1 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {fieldErrors.password}
-                </p>
-              )}
-            </div>
+  const copy = {
+    login_required: {
+      title: "Invite-only Gallery",
+      body: "This gallery is invite-only. Please sign in with your invited Google account to view photos.",
+    },
+    verification_required: {
+      title: "Sign in with Google",
+      body: "This gallery is invite-only. Please sign in with your invited Google account to view photos — email and password sign-in can't be used here.",
+    },
+    not_invited: {
+      title: "Not on the Guest List",
+      body: "The account you're signed in with isn't on this event's guest list. Sign in with the Google account you were invited with, or ask the event owner to invite you.",
+    },
+  }[reason];
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-xs shadow-sm"
-            >
-              {loading ? "Logging in..." : "Login to Guest Account"}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleGuestRegister} className="space-y-4">
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-ink tracking-wider mb-1.5 ml-1">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-4 top-2.5 w-4 h-4 text-dim" />
-                <input
-                  type="text"
-                  required
-                  placeholder="John Doe"
-                  className={`w-full pl-12 pr-4 py-2.5 bg-chalk border ${fieldErrors.name ? "border-danger focus:ring-danger" : "border-border focus:ring-accent"} rounded-xl outline-none text-xs transition text-ink font-semibold placeholder:text-dim`}
-                  value={name}
-                  onChange={(e) => {
-                    setName(e.target.value);
-                    if (fieldErrors.name) setFieldErrors({ ...fieldErrors, name: undefined });
-                  }}
-                />
-              </div>
-              {fieldErrors.name && (
-                <p className="text-danger text-[10px] mt-1 ml-1 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {fieldErrors.name}
-                </p>
-              )}
-            </div>
+  const handleSuccess = (newToken: string) => {
+    localStorage.setItem("token", newToken);
+    // Reload so the gallery is fetched again with the new session.
+    window.location.reload();
+  };
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-ink tracking-wider mb-1.5 ml-1">
-                Email Address
-              </label>
-              <div className="relative">
-                <User className="absolute left-4 top-2.5 w-4 h-4 text-dim" />
-                <input
-                  type="email"
-                  required
-                  placeholder="guest@mail.com"
-                  className={`w-full pl-12 pr-4 py-2.5 bg-chalk border ${fieldErrors.email ? "border-danger focus:ring-danger" : "border-border focus:ring-accent"} rounded-xl outline-none text-xs transition text-ink font-semibold placeholder:text-dim`}
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: undefined });
-                  }}
-                />
-              </div>
-              {fieldErrors.email && (
-                <p className="text-danger text-[10px] mt-1 ml-1 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {fieldErrors.email}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase text-ink tracking-wider mb-1.5 ml-1">
-                Create Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-4 top-2.5 w-4 h-4 text-dim" />
-                <input
-                  type="password"
-                  required
-                  placeholder="Min. 8 characters"
-                  className={`w-full pl-12 pr-4 py-2.5 bg-chalk border ${fieldErrors.password ? "border-danger focus:ring-danger" : "border-border focus:ring-accent"} rounded-xl outline-none text-xs transition text-ink font-semibold placeholder:text-dim`}
-                  value={password}
-                  onChange={(e) => {
-                    setPassword(e.target.value);
-                    if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: undefined });
-                  }}
-                />
-              </div>
-              {fieldErrors.password && (
-                <p className="text-danger text-[10px] mt-1 ml-1 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> {fieldErrors.password}
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-xs shadow-sm flex items-center justify-center gap-2"
-            >
-              <UserPlus className="w-4 h-4" />
-              {loading ? "Creating account..." : "Register Guest Account"}
-            </button>
-          </form>
-        )}
-
-        {/* Google OAuth Section */}
-        {activeTab !== "anonymous" && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 my-2">
-              <div className="flex-1 h-[1px] bg-border" />
-              <span className="text-[9px] uppercase font-bold tracking-wider text-dim">Or continue with</span>
-              <div className="flex-1 h-[1px] bg-border" />
-            </div>
-
-            <div id="google-overlay-btn" className="w-full flex justify-center min-h-[40px]" />
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-chalk px-6">
+      <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-8 text-center shadow-sm">
+        <div className="mx-auto w-12 h-12 bg-ink rounded-2xl flex items-center justify-center mb-4">
+          <Lock className="w-5 h-5 text-chalk" />
+        </div>
+        <h1 className="font-display text-2xl font-bold text-ink mb-2">{copy.title}</h1>
+        <p className="text-dim text-sm leading-relaxed mb-6">{copy.body}</p>
+        <GoogleSignInButton onSuccess={handleSuccess} onError={setError} onLoadingChange={setSigningIn} />
+        {signingIn && <p className="text-xs text-dim mt-4">Signing you in…</p>}
+        {error && (
+          <div className="mt-4 p-3 bg-danger/10 border border-danger/20 text-danger rounded-xl text-xs flex gap-2 text-left">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{error}</span>
           </div>
         )}
       </div>
-
-      {/* Load Google Client Script */}
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        onLoad={initGoogle}
-        strategy="afterInteractive"
-      />
     </div>
   );
 }
