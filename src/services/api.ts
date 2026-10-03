@@ -159,48 +159,18 @@ export const loginGoogle = async (idToken: string): Promise<string> => {
 };
 
 // ── Guest: Saved Faces ──────────────────────────────────────
-export interface SavedFace {
-  id: string;
-  nickname: string;
-  created_at: string;
-  expires_at: string;
-}
-
-export const fetchSavedFaces = async (): Promise<SavedFace[]> => {
-  const { data } = await api.get<SavedFace[]>("/guest/saved-faces");
-  return data;
-};
-
-export const createSavedFace = async (nickname: string, file: Blob): Promise<SavedFace> => {
-  const form = new FormData();
-  form.append("nickname", nickname);
-  form.append("file", file, "selfie.jpg");
-  const { data } = await api.post<SavedFace>("/guest/saved-faces", form, {
-    headers: { "Content-Type": "multipart/form-data" }
-  });
-  return data;
-};
-
-export const updateSavedFace = async (id: string, nickname: string): Promise<SavedFace> => {
-  const { data } = await api.patch<SavedFace>(`/guest/saved-faces/${id}`, { nickname });
-  return data;
-};
-
-export const deleteSavedFace = async (id: string): Promise<void> => {
-  await api.delete(`/guest/saved-faces/${id}`);
-};
-
 // ── Guest: History ──────────────────────────────────────────
 export interface SearchHistory {
   id: string;
   created_at: string;
+  // null when the event has since been deleted
   event: {
     id: string;
     name: string;
     date: string;
     cover_photo_url?: string;
     qr_token: string;
-  };
+  } | null;
   photos: {
     id: string;
     display_url: string;

@@ -1,12 +1,12 @@
 "use client";
-import React, { useState } from "react";
+import React from "react";
 import { MatchResult } from "@/types";
 import { MatchStatus } from "@/hooks/useSelfieMatch";
 import CameraCapture from "./CameraCapture";
 import MatchedResults from "@/components/event/MatchedResults";
 import Spinner from "@/components/ui/Spinner";
 import SelfieUploader from "./SelfieUploader";
-import { SavedFace } from "@/services/api";
+import { SearchHistory } from "@/services/api";
 
 interface Props {
   eventId: string;
@@ -17,8 +17,20 @@ interface Props {
   uploadPct: number;
   onRunMatch: (fileOrId: File | string) => void;
   onReset: () => void;
-  savedFaces?: SavedFace[];
+  /** This user's past searches on this event (see useRecentSearches). */
+  recentSearches?: SearchHistory[];
+  /** Re-open a past search's results — no new face search is run. */
+  onOpenSearch?: (searchId: string) => void;
 }
+
+// History timestamps are naive UTC from the API; parse them as UTC.
+const formatSearchTime = (iso: string) =>
+  new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
 export default function SelfiePanel({
   status,
@@ -28,10 +40,11 @@ export default function SelfiePanel({
   uploadPct,
   onRunMatch,
   onReset,
-  savedFaces = [],
+  recentSearches = [],
+  onOpenSearch,
 }: Props) {
   const busy = ["validating", "resizing", "uploading", "matching"].includes(status);
-  const [selectedFaceId, setSelectedFaceId] = useState("");
+  const showRecent = recentSearches.length > 0 && !!onOpenSearch;
 
   return (
     <div className="bg-surface rounded-2xl border border-border shadow-sm p-6 flex flex-col gap-5">
@@ -71,42 +84,36 @@ export default function SelfiePanel({
       ) : (
         /* ── Idle / error ── */
         <>
-          {/* Saved Faces Selection */}
-          {savedFaces.length > 0 && (
+          {/* Recent Searches (search history) */}
+          {showRecent && (
             <div className="space-y-2.5 p-4 bg-chalk/45 border border-border rounded-2xl">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-dim">
-                Search using saved profile
-              </label>
-              <div className="flex gap-2">
-                <select
-                  value={selectedFaceId}
-                  onChange={(e) => setSelectedFaceId(e.target.value)}
-                  className="flex-1 px-3 py-2 bg-surface border border-border rounded-xl text-xs text-ink focus:outline-none focus:ring-1 focus:ring-accent"
-                >
-                  <option value="">-- Choose a face --</option>
-                  {savedFaces.map((face) => (
-                    <option key={face.id} value={face.id}>
-                      {face.nickname}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    if (selectedFaceId) onRunMatch(selectedFaceId);
-                  }}
-                  disabled={!selectedFaceId}
-                  className="px-4 py-2 bg-ink hover:bg-ink/80 text-chalk text-xs font-bold rounded-xl transition"
-                >
-                  Find
-                </button>
-              </div>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-dim">
+                Recent searches
+              </p>
+              <ul className="space-y-1.5">
+                {recentSearches.map((search) => (
+                  <li key={search.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenSearch(search.id)}
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2 bg-surface border border-border
+                                 hover:border-accent rounded-xl text-xs text-ink transition cursor-pointer"
+                    >
+                      <span className="font-semibold">{formatSearchTime(search.created_at)}</span>
+                      <span className="text-dim">
+                        {search.photos.length} photo{search.photos.length === 1 ? "" : "s"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          {savedFaces.length > 0 && (
+          {showRecent && (
             <div className="flex items-center gap-3">
               <hr className="flex-1 border-border" />
-              <span className="text-[10px] text-dim font-bold uppercase tracking-wider">or new photo</span>
+              <span className="text-[10px] text-dim font-bold uppercase tracking-wider">or new search</span>
               <hr className="flex-1 border-border" />
             </div>
           )}
@@ -134,4 +141,4 @@ export default function SelfiePanel({
       )}
     </div>
   );
-}
+}

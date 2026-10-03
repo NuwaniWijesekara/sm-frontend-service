@@ -93,7 +93,7 @@ export default function LandingPage() {
             </span>
           </h1>
           <p className="text-dim text-base md:text-lg leading-relaxed max-w-xl">
-            Welcome to ScanMe AI. Enter an event's collection username below or choose a saved face to search event photos.
+            Welcome to ScanMe AI. Enter an event's collection username below, then take a selfie to find every photo you're in.
           </p>
 
           {/* Quick Collection Search Bar */}
@@ -121,14 +121,14 @@ export default function LandingPage() {
               <Shield className="w-5 h-5 text-accent-dark shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-semibold text-sm text-ink">Strict Face Retention</h4>
-                <p className="text-xs text-dim mt-1">Temporary uploads expire in 24 hours. Saved faces stay for 30 days of activity.</p>
+                <p className="text-xs text-dim mt-1">Selfies are processed in memory and never stored as images. Guest search history expires after 24 hours.</p>
               </div>
             </div>
             <div className="p-4 bg-surface border border-border rounded-xl flex gap-3 shadow-sm">
               <Camera className="w-5 h-5 text-accent shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-semibold text-sm text-ink">Face Nicknames</h4>
-                <p className="text-xs text-dim mt-1">Register to save multiple family faces (e.g. Kids, Spouse) for easy searching.</p>
+                <h4 className="font-semibold text-sm text-ink">Recent Searches</h4>
+                <p className="text-xs text-dim mt-1">Sign in to keep your search history and reopen past results on each event.</p>
               </div>
             </div>
           </div>

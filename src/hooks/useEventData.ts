@@ -18,7 +18,6 @@ export const useEventData = (token: string) => {
   const [status, setStatus] = useState<LoadStatus>("loading");
 
   useEffect(() => {
-    console.log("token in hook: ", token);
     if (!token) {
       setStatus("invalid_token");
       return;

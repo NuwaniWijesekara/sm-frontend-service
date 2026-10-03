@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { ArrowLeft, Globe, Lock } from "lucide-react";
-import { fetchOwnerGallery, fetchSavedFaces, OwnerGalleryData, SavedFace } from "@/services/api";
+import { fetchOwnerGallery, OwnerGalleryData } from "@/services/api";
 import { useSelfieMatch } from "@/hooks/useSelfieMatch";
+import { useRecentSearches } from "@/hooks/useRecentSearches";
 import EventHeader from "@/components/event/EventHeader";
-import PhotoGallery from "@/components/event/PhotoGallary";
+import PhotoGallery from "@/components/event/PhotoGallery";
 import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
 
@@ -84,13 +85,9 @@ export default function OwnerEventGalleryPage({ params }: Props) {
 function OwnerGallery({ data }: { data: OwnerGalleryData }) {
   const { event, photos } = data;
   const matchKey = event.qr_token || event.id;
-  const { status, statusLabel, results, error, uploadPct, runMatch, reset } = useSelfieMatch(matchKey);
-  const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
+  const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } = useSelfieMatch(matchKey);
+  const recentSearches = useRecentSearches(event.id, status === "done");
   const inviteOnly = event.access_mode === "invite_only";
-
-  useEffect(() => {
-    fetchSavedFaces().then(setSavedFaces).catch(() => setSavedFaces([]));
-  }, []);
 
   return (
     <main className="min-h-screen bg-chalk">
@@ -125,7 +122,8 @@ function OwnerGallery({ data }: { data: OwnerGalleryData }) {
                 uploadPct={uploadPct}
                 onRunMatch={runMatch}
                 onReset={reset}
-                savedFaces={savedFaces}
+                recentSearches={recentSearches}
+                onOpenSearch={loadHistoryMatch}
               />
             </div>
           </aside>

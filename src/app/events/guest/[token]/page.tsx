@@ -6,8 +6,9 @@ import { useSelfieMatch } from "@/hooks/useSelfieMatch";
 import EventHeader from "@/components/event/EventHeader";
 import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
-import PhotoGallery from "@/components/event/PhotoGallary";
-import { fetchSavedFaces, loginAnonymous, SavedFace } from "@/services/api";
+import PhotoGallery from "@/components/event/PhotoGallery";
+import { loginAnonymous } from "@/services/api";
+import { useRecentSearches } from "@/hooks/useRecentSearches";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { Camera, Sparkles, ArrowRight, ArrowLeft, AlertCircle, Lock } from "lucide-react";
 import Link from "next/link";
@@ -112,13 +113,14 @@ function EventView({
 }) {
   const searchParams = useSearchParams();
   const searchId = searchParams.get("search_id");
-  const faceId = searchParams.get("face_id") || searchParams.get("saved_face_id");
 
   const eventToken = data.event.qr_token || token;
   const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } =
     useSelfieMatch(eventToken);
-  const [savedFaces, setSavedFaces] = useState<SavedFace[]>([]);
   const [hasAutoMatched, setHasAutoMatched] = useState(false);
+  // Signed-in (incl. anonymous) users see their earlier searches on this
+  // event; refreshed after each search, which adds a history entry.
+  const recentSearches = useRecentSearches(authToken ? data.event.id : null, `${authToken}:${status === "done"}`);
 
   useEffect(() => {
     if (hasAutoMatched) return;
@@ -126,27 +128,8 @@ function EventView({
     if (searchId) {
       setHasAutoMatched(true);
       loadHistoryMatch(searchId);
-    } else if (faceId) {
-      setHasAutoMatched(true);
-      runMatch(faceId);
     }
-  }, [searchId, faceId, loadHistoryMatch, runMatch, hasAutoMatched]);
-
-  useEffect(() => {
-    if (authToken) {
-      try {
-        const parts = authToken.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-          if (!payload.is_anonymous) {
-            fetchSavedFaces().then(setSavedFaces).catch(console.error);
-          }
-        }
-      } catch (e) {
-        console.error("Failed to decode token/fetch saved faces", e);
-      }
-    }
-  }, [authToken]);
+  }, [searchId, loadHistoryMatch, hasAutoMatched]);
 
   return (
     <main className="min-h-screen bg-chalk">
@@ -179,7 +162,8 @@ function EventView({
                   uploadPct={uploadPct}
                   onRunMatch={runMatch}
                   onReset={reset}
-                  savedFaces={savedFaces}
+                  recentSearches={recentSearches}
+                  onOpenSearch={loadHistoryMatch}
                 />
               </div>
             </aside>
