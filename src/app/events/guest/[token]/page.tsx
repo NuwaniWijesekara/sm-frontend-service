@@ -59,6 +59,34 @@ export default function EventPage({ params }: Props) {
     );
   }
 
+  if (status === "login_required" || status === "verification_required" || status === "not_invited") {
+    // Invite-only gallery. Send them to Google sign-in (the only verified-email
+    // path) and back here afterwards; for the last two cases they're signed in
+    // with the wrong kind of account, so drop that session first.
+    const signIn = () => {
+      if (status !== "login_required") localStorage.removeItem("token");
+      window.location.href = "/auth?redirect=" + encodeURIComponent("/events/guest/" + token);
+    };
+    const copy = {
+      login_required: {
+        title: "Invite-only Gallery",
+        body: "This event's photos are only available to invited guests. Sign in with Google using the email address you were invited with.",
+        label: "Sign in with Google",
+      },
+      verification_required: {
+        title: "Verify Your Email",
+        body: "Invite-only galleries need a verified email. Sign in with Google using the email address you were invited with.",
+        label: "Sign in with Google",
+      },
+      not_invited: {
+        title: "Not on the Guest List",
+        body: "Your account isn't on the guest list for this event. Ask the event owner to invite your email, or sign in with a different Google account.",
+        label: "Use a different account",
+      },
+    }[status];
+    return <EmptyState icon="🔒" title={copy.title} body={copy.body} action={{ label: copy.label, onClick: signIn }} />;
+  }
+
   if (status === "not_ready") {
     return (
       <EmptyState

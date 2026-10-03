@@ -16,7 +16,14 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export type FetchError = "invalid_token" | "not_ready" | "network";
+export type FetchError =
+  | "invalid_token"
+  | "not_ready"
+  | "network"
+  // Invite-only gallery (see sm-guest-service utils/access.py):
+  | "login_required"          // not signed in, or only an anonymous session
+  | "verification_required"   // signed in without Google, so email unproven
+  | "not_invited";            // verified, but not on this event's guest list
 
 // ── Load event by token/username ─────────────────────────────
 export const fetchEventByToken = async (token: string): Promise<EventPageData> => {
@@ -24,7 +31,11 @@ export const fetchEventByToken = async (token: string): Promise<EventPageData> =
     const { data } = await api.get<EventPageData>(`/guest/${token}`);
     return data;
   } catch (err) {
-    const e = err as AxiosError;
+    const e = err as AxiosError<{ detail?: { code?: string } | string }>;
+    const detail = e.response?.data?.detail;
+    const code = typeof detail === "object" ? detail?.code : undefined;
+    if (code === "login_required" || code === "verification_required" || code === "not_invited")
+      throw Object.assign(new Error(code), { reason: code as FetchError });
     if (e.response?.status === 404 || e.response?.status === 401)
       throw Object.assign(new Error("invalid_token"), { reason: "invalid_token" as FetchError });
     if (e.response?.status === 409)
@@ -184,13 +195,27 @@ export const checkUsernameAvailability = async (username: string, excludeEventId
   return data;
 };
 
-export const createEvent = async (name: string, drive_url: string, username?: string) => {
-  const { data } = await api.post("/events/", { name, drive_url, username: username || undefined });
+export type EventAccessMode = "public" | "invite_only";
+
+export const createEvent = async (
+  name: string,
+  drive_url: string,
+  username?: string,
+  access_mode: EventAccessMode = "invite_only"
+) => {
+  const { data } = await api.post("/events/", { name, drive_url, username: username || undefined, access_mode });
   return data;
 };
 
-export const updateEvent = async (id: string, name: string, drive_url: string, username?: string) => {
-  const { data } = await api.put(`/events/${id}`, { name, drive_url, username: username || undefined });
+// access_mode omitted = left unchanged (changing it is owner-only server-side).
+export const updateEvent = async (
+  id: string,
+  name: string,
+  drive_url: string,
+  username?: string,
+  access_mode?: EventAccessMode
+) => {
+  const { data } = await api.put(`/events/${id}`, { name, drive_url, username: username || undefined, access_mode });
   return data;
 };
 

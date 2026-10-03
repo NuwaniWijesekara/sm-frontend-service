@@ -22,6 +22,7 @@ import {
   BulkImportResponse,
   CollaboratorPermission,
   Collaborator,
+  EventAccessMode,
 } from "@/services/api";
 
 interface EventData {
@@ -32,6 +33,7 @@ interface EventData {
   username?: string;
   qr_token?: string;
   owner_id?: string;
+  access_mode?: EventAccessMode;
 }
 
 type DashboardTab = "my-events" | "shared";
@@ -58,6 +60,7 @@ export default function DashboardPage() {
   const [usernameCheckStatus, setUsernameCheckStatus] = useState<"idle" | "checking" | "available" | "taken">("idle");
   const [usernameMessage, setUsernameMessage] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
+  const [accessMode, setAccessMode] = useState<EventAccessMode>("invite_only");
   const [formLoading, setFormLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const [deleteTargetEvent, setDeleteTargetEvent] = useState<EventData | null>(null);
@@ -388,6 +391,7 @@ export default function DashboardPage() {
     setUsernameCheckStatus("idle");
     setUsernameMessage("");
     driveUrl && setDriveUrl("");
+    setAccessMode("invite_only");
     setFormError("");
     setIsFormModalOpen(true);
   };
@@ -400,6 +404,7 @@ export default function DashboardPage() {
     setUsernameCheckStatus("idle");
     setUsernameMessage("");
     setDriveUrl(event.drive_url);
+    setAccessMode(event.access_mode || "public");
     setFormError("");
     setIsFormModalOpen(true);
   };
@@ -426,9 +431,9 @@ export default function DashboardPage() {
 
     try {
       if (modalMode === "CREATE") {
-        await createEvent(eventName, driveUrl, eventUsername);
+        await createEvent(eventName, driveUrl, eventUsername, accessMode);
       } else {
-        await updateEvent(editingEventId!, eventName, driveUrl, eventUsername);
+        await updateEvent(editingEventId!, eventName, driveUrl, eventUsername, accessMode);
       }
       setIsFormModalOpen(false);
       loadEvents();
@@ -853,6 +858,33 @@ export default function DashboardPage() {
                   value={driveUrl}
                   onChange={(e) => setDriveUrl(e.target.value)}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-ink mb-1.5 ml-1">
+                  Who can view the gallery
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["invite_only", "Invited guests", "People you share the event with, signed in with Google"],
+                    ["public", "Anyone with the link", "Link, QR code or username is enough"],
+                  ] as const).map(([value, title, hint]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setAccessMode(value)}
+                      aria-pressed={accessMode === value}
+                      className={`text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                        accessMode === value
+                          ? "border-ink bg-ink/5 ring-1 ring-ink"
+                          : "border-border bg-chalk hover:bg-surface"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold text-ink">{title}</span>
+                      <span className="block text-[11px] text-dim mt-0.5 leading-snug">{hint}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {formError && (
