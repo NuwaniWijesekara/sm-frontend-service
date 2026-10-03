@@ -678,14 +678,23 @@ export default function DashboardPage() {
                   <div className="flex-grow" />
 
                   {ev.status === "ready" ? (
-                    <button
-                      onClick={() => setSelectedEvent(ev)}
-                      className="w-full relative z-10 mt-4 bg-chalk hover:bg-accent/10
-                                 text-ink hover:text-accent-dark border border-border hover:border-accent/30
-                                 py-3 rounded-xl text-sm font-semibold transition-all duration-300"
-                    >
-                      Share with Guests
-                    </button>
+                    <div className="relative z-10 mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => router.push(`/dashboard/events/${ev.id}`)}
+                        className="bg-ink hover:bg-ink/80 text-chalk py-3 rounded-xl text-sm font-semibold
+                                   transition-all duration-300"
+                      >
+                        View Photos
+                      </button>
+                      <button
+                        onClick={() => setSelectedEvent(ev)}
+                        className="bg-chalk hover:bg-accent/10
+                                   text-ink hover:text-accent-dark border border-border hover:border-accent/30
+                                   py-3 rounded-xl text-sm font-semibold transition-all duration-300"
+                      >
+                        Share with Guests
+                      </button>
+                    </div>
                   ) : (
                     <div className="w-full mt-4 bg-chalk border border-border py-3 rounded-xl text-sm font-medium text-dim text-center cursor-not-allowed">
                       Processing faces...

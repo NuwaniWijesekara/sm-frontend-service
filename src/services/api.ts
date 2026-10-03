@@ -1,5 +1,5 @@
 import axios, { AxiosError } from "axios";
-import { EventPageData, MatchResult } from "@/types";
+import { Event, EventPageData, MatchResult, Photo } from "@/types";
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -44,6 +44,17 @@ export const fetchEventByToken = async (token: string): Promise<EventPageData> =
   }
 };
 
+// True for tokens from POST /auth/anonymous (temporary instant-access sessions).
+const isAnonymousToken = (token: string | null): boolean => {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return payload.is_anonymous === true;
+  } catch {
+    return false;
+  }
+};
+
 // ── Selfie match ──────────────────────────────────────────────
 export const matchSelfie = async (
   eventId: string,
@@ -84,7 +95,14 @@ export const matchSelfie = async (
   try {
     return await sendRequest();
   } catch (err: any) {
-    if (err.response?.status === 401 || err.response?.data?.detail === "Invalid token") {
+    // Only recover a dead *anonymous* session by starting a fresh one. Never
+    // replace a real account's token — that silently signed owners and guests
+    // out (and an invite-only gallery then rejects the anonymous session) —
+    // and never retry access-control denials, which carry a `code`.
+    const detail = err.response?.data?.detail;
+    const isAccessDenial = typeof detail === "object" && detail?.code;
+    const sessionDead = err.response?.status === 401 || detail === "Invalid token";
+    if (sessionDead && !isAccessDenial && isAnonymousToken(token)) {
       try {
         const newToken = await loginAnonymous();
         if (typeof window !== "undefined") {
@@ -97,6 +115,19 @@ export const matchSelfie = async (
     }
     throw err;
   }
+};
+
+// ── Owner gallery (photographer portal) ──────────────────────
+// Owner-only, served by sm-photographer-service — works for public and
+// invite-only events alike and doesn't depend on guest-side sign-in.
+export interface OwnerGalleryData {
+  event: Event & { access_mode?: EventAccessMode };
+  photos: Photo[];
+}
+
+export const fetchOwnerGallery = async (eventId: string): Promise<OwnerGalleryData> => {
+  const { data } = await api.get<OwnerGalleryData>(`/events/${eventId}/photos`);
+  return data;
 };
 
 // ── Unified Auth ──────────────────────────────────────────────

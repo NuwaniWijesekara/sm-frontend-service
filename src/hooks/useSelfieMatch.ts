@@ -25,6 +25,15 @@ const STATUS_LABELS: Record<MatchStatus, string> = {
 
 const BUSY: MatchStatus[] = ["validating", "resizing", "uploading", "matching"];
 
+// API errors carry `detail` as a string, or as {code, message} for
+// access-control denials (sm-guest-service utils/access.py).
+const errorMessage = (err: any, fallback: string): string => {
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail.message === "string") return detail.message;
+  return fallback;
+};
+
 export const useSelfieMatch = (eventId: string) => {
   const [status,    setStatus]    = useState<MatchStatus>("idle");
   const [results,   setResults]   = useState<MatchResult[]>([]);
@@ -46,7 +55,7 @@ export const useSelfieMatch = (eventId: string) => {
           setResults(matches);
           setStatus("done");
         } catch (err: any) {
-          setError(err.response?.data?.detail || "Matching failed. Please try again.");
+          setError(errorMessage(err, "Matching failed. Please try again."));
           setStatus("error");
         }
       } else {
@@ -78,7 +87,7 @@ export const useSelfieMatch = (eventId: string) => {
           setResults(matches);
           setStatus("done");
         } catch (err: any) {
-          setError(err.response?.data?.detail || "Matching failed. Try a well-lit, clear selfie facing the camera.");
+          setError(errorMessage(err, "Matching failed. Try a well-lit, clear selfie facing the camera."));
           setStatus("error");
         }
       }
