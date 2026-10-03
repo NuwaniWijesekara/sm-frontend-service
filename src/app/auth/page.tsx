@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Script from "next/script";
-import { login, signup, loginAnonymous, loginGoogle } from "@/services/api";
+import { login, signup, loginAnonymous } from "@/services/api";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/dashboard";
+  // Guest galleries are Google-only (invite-only access needs a verified
+  // email, which password accounts never have), so a sign-in started from a
+  // gallery link never shows the email/password form.
+  const isGuestGallerySignIn = redirectTo.startsWith("/events/guest/");
 
   // State to toggle between Login and Sign Up mode
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -63,43 +67,37 @@ function AuthPageInner() {
     }
   };
 
-  const handleGoogleCredentialResponse = async (response: any) => {
-    setError("");
-    setLoading(true);
-    try {
-      if (!response.credential) {
-        throw new Error("No credential returned from Google login.");
-      }
-      const token = await loginGoogle(response.credential);
-      goToRedirect(token);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || "Google authentication failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const googleButton = (
+    <GoogleSignInButton
+      onSuccess={goToRedirect}
+      onError={setError}
+      onLoadingChange={setLoading}
+      width={350}
+    />
+  );
 
-  const initGoogle = () => {
-    if (typeof window !== "undefined" && (window as any).google) {
-      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-      (window as any).google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredentialResponse,
-      });
-      const btnContainer = document.getElementById("google-login-btn");
-      if (btnContainer) {
-        (window as any).google.accounts.id.renderButton(
-          btnContainer,
-          { theme: "outline", size: "large", width: 350, shape: "rectangular" }
-        );
-      }
-    }
-  };
-
-  useEffect(() => {
-    initGoogle();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (isGuestGallerySignIn) {
+    return (
+      <main className="min-h-screen bg-chalk flex flex-col items-center justify-center p-6 font-body">
+        <div className="max-w-md w-full bg-surface border border-border p-10 rounded-2xl shadow-sm text-center">
+          <div className="w-16 h-16 bg-ink rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-3xl">🔒</span>
+          </div>
+          <h2 className="font-display text-3xl font-bold text-ink">Sign in to view photos</h2>
+          <p className="text-dim text-sm mt-2 mb-8">
+            Event galleries use Google sign-in. Please use the Google account you were invited with.
+          </p>
+          {googleButton}
+          {loading && <p className="text-xs text-dim mt-4">Signing you in…</p>}
+          {error && (
+            <div className="mt-4 p-3 bg-danger/10 text-danger border border-danger/20 rounded-xl text-sm font-medium">
+              {error}
+            </div>
+          )}
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-chalk flex flex-col items-center justify-center p-6 font-body">
@@ -198,7 +196,7 @@ function AuthPageInner() {
           <div className="flex-1 h-[1px] bg-border" />
         </div>
 
-        <div id="google-login-btn" className="w-full flex justify-center min-h-[44px] mb-4" />
+        <div className="mb-4">{googleButton}</div>
 
         <button
           type="button"
@@ -226,12 +224,6 @@ function AuthPageInner() {
           </button>
         </div>
       </div>
-
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        onLoad={initGoogle}
-        strategy="afterInteractive"
-      />
     </main>
   );
 }

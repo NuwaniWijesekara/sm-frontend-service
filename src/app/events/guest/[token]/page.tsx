@@ -8,7 +8,8 @@ import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
 import PhotoGallery from "@/components/event/PhotoGallary";
 import { fetchSavedFaces, loginAnonymous, SavedFace } from "@/services/api";
-import { Camera, Sparkles, ArrowRight, ArrowLeft, AlertCircle } from "lucide-react";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { Camera, Sparkles, ArrowRight, ArrowLeft, AlertCircle, Lock } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
@@ -60,31 +61,7 @@ export default function EventPage({ params }: Props) {
   }
 
   if (status === "login_required" || status === "verification_required" || status === "not_invited") {
-    // Invite-only gallery. Send them to Google sign-in (the only verified-email
-    // path) and back here afterwards; for the last two cases they're signed in
-    // with the wrong kind of account, so drop that session first.
-    const signIn = () => {
-      if (status !== "login_required") localStorage.removeItem("token");
-      window.location.href = "/auth?redirect=" + encodeURIComponent("/events/guest/" + token);
-    };
-    const copy = {
-      login_required: {
-        title: "Invite-only Gallery",
-        body: "This event's photos are only available to invited guests. Sign in with Google using the email address you were invited with.",
-        label: "Sign in with Google",
-      },
-      verification_required: {
-        title: "Verify Your Email",
-        body: "Invite-only galleries need a verified email. Sign in with Google using the email address you were invited with.",
-        label: "Sign in with Google",
-      },
-      not_invited: {
-        title: "Not on the Guest List",
-        body: "Your account isn't on the guest list for this event. Ask the event owner to invite your email, or sign in with a different Google account.",
-        label: "Use a different account",
-      },
-    }[status];
-    return <EmptyState icon="🔒" title={copy.title} body={copy.body} action={{ label: copy.label, onClick: signIn }} />;
+    return <InviteOnlyGate reason={status} />;
   }
 
   if (status === "not_ready") {
@@ -249,7 +226,7 @@ function AuthGate({ token, onAuthSuccess }: { token: string; onAuthSuccess: (tok
             <Camera className="w-5 h-5 text-chalk" />
           </div>
           <h2 className="text-xl font-extrabold tracking-tight mt-3 text-ink font-display">Welcome</h2>
-          <p className="text-xs text-dim">Continue as a guest to search this event's photos, or sign in to your account.</p>
+          <p className="text-xs text-dim">Continue as a guest to search this event's photos, or sign in with Google to keep your searches.</p>
         </div>
 
         {error && (
@@ -270,13 +247,66 @@ function AuthGate({ token, onAuthSuccess }: { token: string; onAuthSuccess: (tok
           >
             {loading ? "Starting session..." : "Continue as Guest"} <ArrowRight className="w-3.5 h-3.5" />
           </button>
-          <Link
-            href={"/auth?redirect=" + encodeURIComponent("/events/guest/" + token)}
-            className="block w-full py-3 rounded-xl border border-border bg-chalk hover:bg-surface text-ink text-xs font-semibold transition-all"
-          >
-            Already have an account? Sign In
-          </Link>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-dim">Or</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <GoogleSignInButton
+            onSuccess={onAuthSuccess}
+            onError={setError}
+            onLoadingChange={setLoading}
+          />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Invite-only gallery sign-in. Google is the only option offered here:
+// access needs a verified email (sm-guest-service utils/access.py), and only a
+// Google sign-in provides one — email/password lives on the dashboard login.
+function InviteOnlyGate({ reason }: { reason: "login_required" | "verification_required" | "not_invited" }) {
+  const [error, setError] = useState("");
+  const [signingIn, setSigningIn] = useState(false);
+
+  const copy = {
+    login_required: {
+      title: "Invite-only Gallery",
+      body: "This gallery is invite-only. Please sign in with your invited Google account to view photos.",
+    },
+    verification_required: {
+      title: "Sign in with Google",
+      body: "This gallery is invite-only. Please sign in with your invited Google account to view photos — email and password sign-in can't be used here.",
+    },
+    not_invited: {
+      title: "Not on the Guest List",
+      body: "The account you're signed in with isn't on this event's guest list. Sign in with the Google account you were invited with, or ask the event owner to invite you.",
+    },
+  }[reason];
+
+  const handleSuccess = (newToken: string) => {
+    localStorage.setItem("token", newToken);
+    // Reload so the gallery is fetched again with the new session.
+    window.location.reload();
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-chalk px-6">
+      <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-8 text-center shadow-sm">
+        <div className="mx-auto w-12 h-12 bg-ink rounded-2xl flex items-center justify-center mb-4">
+          <Lock className="w-5 h-5 text-chalk" />
+        </div>
+        <h1 className="font-display text-2xl font-bold text-ink mb-2">{copy.title}</h1>
+        <p className="text-dim text-sm leading-relaxed mb-6">{copy.body}</p>
+        <GoogleSignInButton onSuccess={handleSuccess} onError={setError} onLoadingChange={setSigningIn} />
+        {signingIn && <p className="text-xs text-dim mt-4">Signing you in…</p>}
+        {error && (
+          <div className="mt-4 p-3 bg-danger/10 border border-danger/20 text-danger rounded-xl text-xs flex gap-2 text-left">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="font-semibold">{error}</span>
+          </div>
+        )}
       </div>
     </div>
   );
