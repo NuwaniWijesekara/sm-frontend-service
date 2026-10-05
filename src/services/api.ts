@@ -4,9 +4,8 @@ import { Event, EventPageData, MatchResult, Photo } from "@/types";
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // Single client for every backend call. There is only one account model and
-// one token now — every user (event creator, collaborator, or anonymous
-// instant-access guest) is a row in the same Users table and carries the
-// same `token` key in localStorage.
+// one token now — every user (event creator or collaborator) is a row in the
+// same Users table and carries the same `token` key in localStorage.
 export const api = axios.create({ baseURL, timeout: 60000 });
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -21,7 +20,7 @@ export type FetchError =
   | "not_ready"
   | "network"
   // Invite-only gallery (see sm-guest-service utils/access.py):
-  | "login_required"          // not signed in, or only an anonymous session
+  | "login_required"          // not signed in (invite-only gallery)
   | "verification_required"   // signed in without Google, so email unproven
   | "not_invited";            // verified, but not on this event's guest list
 
@@ -44,17 +43,6 @@ export const fetchEventByToken = async (token: string): Promise<EventPageData> =
   }
 };
 
-// True for tokens from POST /auth/anonymous (temporary instant-access sessions).
-const isAnonymousToken = (token: string | null): boolean => {
-  if (!token) return false;
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
-    return payload.is_anonymous === true;
-  } catch {
-    return false;
-  }
-};
-
 // ── Selfie match ──────────────────────────────────────────────
 export const matchSelfie = async (
   eventId: string,
@@ -62,59 +50,21 @@ export const matchSelfie = async (
   savedFaceId?: string,
   onProgress?: (pct: number) => void
 ): Promise<MatchResult[]> => {
-  let token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  if (!token) {
-    try {
-      token = await loginAnonymous();
-      if (typeof window !== "undefined") {
-        localStorage.setItem("token", token);
-      }
-    } catch (e) {
-      console.warn("Auto anonymous login failed", e);
-    }
+  const form = new FormData();
+  if (selfieBlob) {
+    form.append("selfie", selfieBlob, "selfie.jpg");
   }
-
-  const sendRequest = async () => {
-    const form = new FormData();
-    if (selfieBlob) {
-      form.append("selfie", selfieBlob, "selfie.jpg");
-    }
-    if (savedFaceId) {
-      form.append("saved_face_id", savedFaceId);
-    }
-    form.append("event_id", eventId);
-    const { data } = await api.post<{ matches: MatchResult[] }>("/match/selfie", form, {
-      headers: { "Content-Type": "multipart/form-data" },
-      onUploadProgress: (e) => {
-        if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
-      },
-    });
-    return data.matches;
-  };
-
-  try {
-    return await sendRequest();
-  } catch (err: any) {
-    // Only recover a dead *anonymous* session by starting a fresh one. Never
-    // replace a real account's token — that silently signed owners and guests
-    // out (and an invite-only gallery then rejects the anonymous session) —
-    // and never retry access-control denials, which carry a `code`.
-    const detail = err.response?.data?.detail;
-    const isAccessDenial = typeof detail === "object" && detail?.code;
-    const sessionDead = err.response?.status === 401 || detail === "Invalid token";
-    if (sessionDead && !isAccessDenial && isAnonymousToken(token)) {
-      try {
-        const newToken = await loginAnonymous();
-        if (typeof window !== "undefined") {
-          localStorage.setItem("token", newToken);
-        }
-        return await sendRequest();
-      } catch (retryErr) {
-        throw err;
-      }
-    }
-    throw err;
+  if (savedFaceId) {
+    form.append("saved_face_id", savedFaceId);
   }
+  form.append("event_id", eventId);
+  const { data } = await api.post<{ matches: MatchResult[] }>("/match/selfie", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (e) => {
+      if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+    },
+  });
+  return data.matches;
 };
 
 // ── Owner gallery (photographer portal) ──────────────────────
@@ -131,9 +81,9 @@ export const fetchOwnerGallery = async (eventId: string): Promise<OwnerGalleryDa
 };
 
 // ── Unified Auth ──────────────────────────────────────────────
-// Every user — event creator, collaborator, or anonymous instant-access
-// guest — is a row in the same Users table and goes through these same
-// endpoints, all issuing the same standard JWT.
+// Every user — event creator or collaborator — is a row in the same Users
+// table and goes through these same endpoints, all issuing the same standard
+// JWT. There are no anonymous sessions: selfie search needs a real account.
 export const signup = async (email: string, password: string, name?: string): Promise<void> => {
   await api.post("/auth/signup", { email, password, name });
 };
@@ -145,11 +95,6 @@ export const login = async (email: string, password: string): Promise<string> =>
   const { data } = await api.post<{ access_token: string }>("/auth/login", form.toString(), {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
-  return data.access_token;
-};
-
-export const loginAnonymous = async (): Promise<string> => {
-  const { data } = await api.post<{ access_token: string }>("/auth/anonymous");
   return data.access_token;
 };
 

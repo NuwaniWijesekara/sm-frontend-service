@@ -2,13 +2,11 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { loginAnonymous } from "@/services/api";
-import { Camera, ArrowRight, Shield, Sparkles, AlertCircle, Search } from "lucide-react";
+import DemoVideo from "@/components/landing/DemoVideo";
+import { Camera, ArrowRight, Shield, Sparkles, Search } from "lucide-react";
 
 export default function LandingPage() {
   const router = useRouter();
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [hasToken, setHasToken] = useState(false);
   const [collectionSearchQuery, setCollectionSearchQuery] = useState("");
 
@@ -30,25 +28,26 @@ export default function LandingPage() {
     }
   }, []);
 
-  const handleContinueAsGuest = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const token = await loginAnonymous();
-      localStorage.setItem("token", token);
-      router.push("/dashboard");
-    } catch (err) {
-      setError("Failed to start a temporary session. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+  // Smooth-scroll the window to the demo (the section's scroll-margin keeps
+  // it clear of the top edge) instead of relying on the instant hash jump.
+  const scrollToDemo = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const target = document.getElementById("demo");
+    if (!target) return; // fall back to the plain #demo anchor
+    e.preventDefault();
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
   };
 
   return (
-    <main className="min-h-screen bg-chalk text-ink flex flex-col justify-between p-6 md:p-12 font-body relative overflow-hidden">
-      {/* Background blobs for premium warm accent look */}
-      <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-accent/5 blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-accent/5 blur-[120px] pointer-events-none" />
+    <main className="min-h-screen bg-chalk text-ink flex flex-col justify-between p-6 md:p-12 font-body relative">
+      {/* Background blobs for premium warm accent look. They're clipped by
+          their own layer rather than by <main>: an overflow-hidden <main>
+          is still a scroll container, so jumping to #demo scrolled <main>
+          itself, hiding the hero and leaving blank space at the bottom. */}
+      <div aria-hidden className="absolute inset-0 overflow-clip pointer-events-none">
+        <div className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-accent/5 blur-[120px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] rounded-full bg-accent/5 blur-[120px]" />
+      </div>
 
       {/* Header */}
       <header className="max-w-7xl w-full mx-auto flex items-center justify-between z-10">
@@ -121,7 +120,7 @@ export default function LandingPage() {
               <Shield className="w-5 h-5 text-accent-dark shrink-0 mt-0.5" />
               <div>
                 <h4 className="font-semibold text-sm text-ink">Strict Face Retention</h4>
-                <p className="text-xs text-dim mt-1">Selfies are processed in memory and never stored as images. Guest search history expires after 24 hours.</p>
+                <p className="text-xs text-dim mt-1">Selfies are processed in memory and never stored as images.</p>
               </div>
             </div>
             <div className="p-4 bg-surface border border-border rounded-xl flex gap-3 shadow-sm">
@@ -143,16 +142,9 @@ export default function LandingPage() {
             <div className="space-y-2">
               <h3 className="text-lg font-bold text-ink">Get Started</h3>
               <p className="text-xs text-dim leading-relaxed max-w-sm mx-auto">
-                Skip registration and search event photos instantly — your search history and uploads are temporary and deleted after 24 hours. Or sign in to create your own events and keep everything permanently.
+                Sign in with Google or email to search event photos and keep your search history. From your dashboard you can also create and share your own events.
               </p>
             </div>
-
-            {error && (
-              <div className="p-3.5 bg-danger/10 border border-danger/20 text-danger rounded-xl text-xs flex gap-2 items-start text-left">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="font-medium">{error}</span>
-              </div>
-            )}
 
             {hasToken ? (
               <button
@@ -163,24 +155,26 @@ export default function LandingPage() {
               </button>
             ) : (
               <div className="space-y-3">
-                <button
-                  onClick={handleContinueAsGuest}
-                  disabled={loading}
-                  className="w-full py-3.5 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-2 shadow-sm disabled:opacity-40"
-                >
-                  {loading ? "Starting session..." : "Continue as Guest"} <ArrowRight className="w-4 h-4" />
-                </button>
                 <Link
                   href="/auth"
+                  className="w-full py-3.5 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-sm flex items-center justify-center gap-2 shadow-sm"
+                >
+                  Login / Sign Up <ArrowRight className="w-4 h-4" />
+                </Link>
+                <a
+                  href="#demo"
+                  onClick={scrollToDemo}
                   className="w-full py-3 rounded-xl border border-border bg-chalk hover:bg-surface text-ink text-sm font-semibold transition-all inline-flex items-center justify-center"
                 >
-                  Login / Sign Up
-                </Link>
+                  Watch the demo
+                </a>
               </div>
             )}
           </div>
         </div>
       </section>
+
+      <DemoVideo />
 
       {/* Footer */}
       <footer className="max-w-7xl w-full mx-auto text-center border-t border-border pt-6 mt-8 z-10 flex flex-col sm:flex-row justify-between text-xs text-dim">

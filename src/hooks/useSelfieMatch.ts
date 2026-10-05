@@ -34,11 +34,23 @@ const errorMessage = (err: any, fallback: string): string => {
   return fallback;
 };
 
+// Selfie search always needs an account (sm-guest-service match.py uses
+// get_current_user), even in public galleries: a missing, expired or
+// leftover anonymous token comes back as 401 (or FastAPI's 403 "Not
+// authenticated" when no token was sent at all).
+const isAuthError = (err: any): boolean => {
+  const res = err?.response;
+  return res?.status === 401 || (res?.status === 403 && res?.data?.detail === "Not authenticated");
+};
+
 export const useSelfieMatch = (eventId: string) => {
   const [status,    setStatus]    = useState<MatchStatus>("idle");
   const [results,   setResults]   = useState<MatchResult[]>([]);
   const [error,     setError]     = useState<string | null>(null);
   const [uploadPct, setUploadPct] = useState(0);
+  // Set when the server rejected the search for lack of a valid session, so
+  // the page can prompt for sign-in instead of only showing an error.
+  const [authRequired, setAuthRequired] = useState(false);
 
   const runMatch = useCallback(
     async (fileOrId: File | string) => {
@@ -47,6 +59,7 @@ export const useSelfieMatch = (eventId: string) => {
       setError(null);
       setResults([]);
       setUploadPct(0);
+      setAuthRequired(false);
 
       if (typeof fileOrId === "string") {
         setStatus("matching");
@@ -55,6 +68,7 @@ export const useSelfieMatch = (eventId: string) => {
           setResults(matches);
           setStatus("done");
         } catch (err: any) {
+          setAuthRequired(isAuthError(err));
           setError(errorMessage(err, "Matching failed. Please try again."));
           setStatus("error");
         }
@@ -87,6 +101,7 @@ export const useSelfieMatch = (eventId: string) => {
           setResults(matches);
           setStatus("done");
         } catch (err: any) {
+          setAuthRequired(isAuthError(err));
           setError(errorMessage(err, "Matching failed. Try a well-lit, clear selfie facing the camera."));
           setStatus("error");
         }
@@ -130,6 +145,7 @@ export const useSelfieMatch = (eventId: string) => {
     setResults([]);
     setError(null);
     setUploadPct(0);
+    setAuthRequired(false);
   }, []);
 
   return {
@@ -138,6 +154,7 @@ export const useSelfieMatch = (eventId: string) => {
     results,
     error,
     uploadPct,
+    authRequired,
     runMatch,
     loadHistoryMatch,
     reset,
