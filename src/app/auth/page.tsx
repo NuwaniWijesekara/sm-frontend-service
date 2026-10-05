@@ -2,17 +2,19 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { login, signup, loginAnonymous } from "@/services/api";
+import { login, signup } from "@/services/api";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 
 function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect") || "/dashboard";
-  // Guest galleries are Google-only (invite-only access needs a verified
-  // email, which password accounts never have), so a sign-in started from a
-  // gallery link never shows the email/password form.
-  const isGuestGallerySignIn = redirectTo.startsWith("/events/guest/");
+  // Gallery sign-ins default to Google only (invite-only access needs a
+  // verified email, which password accounts never have). Public galleries
+  // accept any account, so their sign-in prompt links here with
+  // `method=password` to offer the email/password form as well.
+  const isGuestGallerySignIn =
+    redirectTo.startsWith("/events/guest/") && searchParams.get("method") !== "password";
 
   // State to toggle between Login and Sign Up mode
   const [isLoginMode, setIsLoginMode] = useState(true);
@@ -49,19 +51,6 @@ function AuthPageInner() {
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       setError(detail || (isLoginMode ? "Invalid email or password" : "Failed to create account"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAnonymous = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const token = await loginAnonymous();
-      goToRedirect(token);
-    } catch (err) {
-      setError("Failed to start a temporary session. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -197,16 +186,6 @@ function AuthPageInner() {
         </div>
 
         <div className="mb-4">{googleButton}</div>
-
-        <button
-          type="button"
-          onClick={handleAnonymous}
-          disabled={loading}
-          className="w-full py-3 rounded-xl border border-border bg-chalk hover:bg-surface
-                     text-ink text-sm font-semibold transition-all disabled:opacity-40"
-        >
-          Continue as Guest
-        </button>
 
         <div className="mt-6 text-center">
           <button

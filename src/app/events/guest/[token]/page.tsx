@@ -1,16 +1,15 @@
 "use client";
-import React, { use, useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import React, { use, useState, useEffect, useRef, Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEventData } from "@/hooks/useEventData";
 import { useSelfieMatch } from "@/hooks/useSelfieMatch";
 import EventHeader from "@/components/event/EventHeader";
 import SelfiePanel from "@/components/selfie/SelfiePanel";
 import Spinner from "@/components/ui/Spinner";
 import PhotoGallery from "@/components/event/PhotoGallery";
-import { loginAnonymous } from "@/services/api";
 import { useRecentSearches } from "@/hooks/useRecentSearches";
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
-import { Camera, Sparkles, ArrowRight, ArrowLeft, AlertCircle, Lock } from "lucide-react";
+import { ArrowLeft, AlertCircle, Lock, X } from "lucide-react";
 import Link from "next/link";
 
 interface Props {
@@ -20,25 +19,16 @@ interface Props {
 export default function EventPage({ params }: Props) {
   const { token } = use(params);
   const { data, status } = useEventData(token);
+  // Public galleries are browsable without an account; selfie search is not
+  // (EventView prompts for sign-in). Invite-only galleries fail the fetch
+  // above with `login_required` and show InviteOnlyGate instead.
   const [authToken, setAuthToken] = useState<string | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const t = localStorage.getItem("token");
-      if (!t) {
-        setShowAuthModal(true);
-      } else {
-        setAuthToken(t);
-      }
+      setAuthToken(localStorage.getItem("token"));
     }
   }, []);
-
-  const handleAuthSuccess = (t: string) => {
-    localStorage.setItem("token", t);
-    setAuthToken(t);
-    setShowAuthModal(false);
-  };
 
   if (status === "loading") {
     return (
@@ -87,18 +77,13 @@ export default function EventPage({ params }: Props) {
   }
 
   return (
-    <>
-      {showAuthModal && (
-        <AuthGate token={token} onAuthSuccess={handleAuthSuccess} />
-      )}
-      <Suspense fallback={
-        <div className="min-h-screen flex items-center justify-center bg-chalk">
-          <Spinner size="lg" />
-        </div>
-      }>
-        <EventView token={token} data={data} authToken={authToken} />
-      </Suspense>
-    </>
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-chalk">
+        <Spinner size="lg" />
+      </div>
+    }>
+      <EventView token={token} data={data} authToken={authToken} onSignedIn={setAuthToken} />
+    </Suspense>
   );
 }
 
@@ -106,19 +91,51 @@ function EventView({
   token,
   data,
   authToken,
+  onSignedIn,
 }: {
   token: string;
   data: NonNullable<ReturnType<typeof useEventData>["data"]>;
   authToken: string | null;
+  onSignedIn: (token: string) => void;
 }) {
   const searchParams = useSearchParams();
   const searchId = searchParams.get("search_id");
 
   const eventToken = data.event.qr_token || token;
-  const { status, statusLabel, results, error, uploadPct, runMatch, loadHistoryMatch, reset } =
+  const { status, statusLabel, results, error, uploadPct, authRequired, runMatch, loadHistoryMatch, reset } =
     useSelfieMatch(eventToken);
   const [hasAutoMatched, setHasAutoMatched] = useState(false);
-  // Signed-in (incl. anonymous) users see their earlier searches on this
+
+  // Selfie search always needs an account, even in a public gallery. A
+  // signed-out visitor gets the sign-in modal first; the selfie they picked
+  // is kept and the search runs as soon as they have signed in.
+  const [showSignIn, setShowSignIn] = useState(false);
+  const pendingMatch = useRef<File | string | null>(null);
+
+  const handleRunMatch = (fileOrId: File | string) => {
+    if (!authToken) {
+      pendingMatch.current = fileOrId;
+      setShowSignIn(true);
+      return;
+    }
+    runMatch(fileOrId);
+  };
+
+  const handleSignedIn = (newToken: string) => {
+    localStorage.setItem("token", newToken);
+    onSignedIn(newToken);
+    setShowSignIn(false);
+    const pending = pendingMatch.current;
+    pendingMatch.current = null;
+    if (pending) runMatch(pending);
+  };
+
+  // The server can still reject a stored token (expired, or left over from
+  // the removed anonymous sessions) — prompt for sign-in then too.
+  useEffect(() => {
+    if (authRequired) setShowSignIn(true);
+  }, [authRequired]);
+  // Signed-in users see their earlier searches on this
   // event; refreshed after each search, which adds a history entry.
   const recentSearches = useRecentSearches(authToken ? data.event.id : null, `${authToken}:${status === "done"}`);
 
@@ -160,7 +177,7 @@ function EventView({
                   results={results}
                   error={error}
                   uploadPct={uploadPct}
-                  onRunMatch={runMatch}
+                  onRunMatch={handleRunMatch}
                   onReset={reset}
                   recentSearches={recentSearches}
                   onOpenSearch={loadHistoryMatch}
@@ -181,67 +198,70 @@ function EventView({
           </div>
         </footer>
       </div>
+
+      {showSignIn && (
+        <SignInModal
+          onSuccess={handleSignedIn}
+          onClose={() => {
+            pendingMatch.current = null;
+            setShowSignIn(false);
+          }}
+        />
+      )}
     </main>
   );
 }
 
-function AuthGate({ token, onAuthSuccess }: { token: string; onAuthSuccess: (token: string) => void }) {
+// Shown when a signed-out visitor starts a selfie search. Browsing a public
+// gallery needs no account, but searching it does (Google or email/password).
+function SignInModal({ onSuccess, onClose }: { onSuccess: (token: string) => void; onClose: () => void }) {
+  const pathname = usePathname();
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleContinueAsGuest = async () => {
-    setError("");
-    setLoading(true);
-    try {
-      const newToken = await loginAnonymous();
-      onAuthSuccess(newToken);
-    } catch (err: any) {
-      setError("Failed to start a temporary session. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [signingIn, setSigningIn] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 md:p-8 space-y-6 shadow-xl relative text-ink">
-        <div className="text-center space-y-1">
-          <div className="mx-auto w-10 h-10 bg-ink rounded-xl flex items-center justify-center shadow-sm">
-            <Camera className="w-5 h-5 text-chalk" />
-          </div>
-          <h2 className="text-xl font-extrabold tracking-tight mt-3 text-ink font-display">Welcome</h2>
-          <p className="text-xs text-dim">Continue as a guest to search this event's photos, or sign in with Google to keep your searches.</p>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="selfie-sign-in-title"
+        className="w-full max-w-md bg-surface border border-border rounded-3xl p-6 md:p-8 shadow-xl relative text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-dim hover:text-ink hover:bg-chalk transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <div className="mx-auto w-12 h-12 bg-ink rounded-2xl flex items-center justify-center mb-4">
+          <Lock className="w-5 h-5 text-chalk" />
         </div>
-
+        <h2 id="selfie-sign-in-title" className="font-display text-2xl font-bold text-ink mb-2">
+          Sign in to find your photos
+        </h2>
+        <p className="text-dim text-sm leading-relaxed mb-6">
+          Selfie search needs an account so your searches stay private to you and you can reopen past results.
+        </p>
+        <GoogleSignInButton onSuccess={onSuccess} onError={setError} onLoadingChange={setSigningIn} />
+        <Link
+          href={`/auth?redirect=${encodeURIComponent(pathname)}&method=password`}
+          className="inline-block mt-4 text-xs font-semibold text-accent hover:text-accent-dark transition-colors"
+        >
+          Use email and password instead
+        </Link>
+        {signingIn && <p className="text-xs text-dim mt-4">Signing you in…</p>}
         {error && (
-          <div className="p-3.5 bg-danger/10 border border-danger/20 text-danger rounded-xl text-xs flex gap-2">
+          <div className="mt-4 p-3 bg-danger/10 border border-danger/20 text-danger rounded-xl text-xs flex gap-2 text-left">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span className="font-semibold">{error}</span>
           </div>
         )}
-
-        <div className="space-y-4 text-center">
-          <p className="text-xs text-dim leading-relaxed max-w-sm mx-auto">
-            Continuing as a guest is instant — your search history and uploads are temporary and automatically deleted in 24 hours.
-          </p>
-          <button
-            onClick={handleContinueAsGuest}
-            disabled={loading}
-            className="w-full py-3 rounded-xl font-bold bg-ink text-chalk hover:bg-ink/80 hover:-translate-y-0.5 active:scale-[0.99] transition-all text-xs flex items-center justify-center gap-2 shadow-sm disabled:opacity-40"
-          >
-            {loading ? "Starting session..." : "Continue as Guest"} <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-[10px] uppercase font-bold tracking-wider text-dim">Or</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-          <GoogleSignInButton
-            onSuccess={onAuthSuccess}
-            onError={setError}
-            onLoadingChange={setLoading}
-          />
-        </div>
       </div>
     </div>
   );
